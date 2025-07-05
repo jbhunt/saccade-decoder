@@ -15,14 +15,17 @@ The `load_mlati` function extracts spiking activity and eye velocity signals fro
 - `y` (N saccades x P features) - Numpy array where N is the number of saccades and P is the eye velocity for each saccade in a window of time around the saccade
 - `z` (N saccades x 1) - Numpy array where N is the number of saccades and each entry indicates the direction of the saccade (-1, 0, 1): -1 is a temporal movement, 1 is a nasal movement, and 0 is not a saccade
 
-## Features (saccade waveforms)
-The `y` variable returned by the `load_mlati` function contains the velocity waveforms for each saccade in the training dataset; whereas, the `z` variable indicates the type of saccade. The saccade waveforms represent how fast the eye was moving in a window of time around the beginning of the saccade and will be used as the target variables for regression. In the figure below, I'm showing 30 samples (and the mean) of each "type" of saccade: "Not a saccade," "Temporal" saccades, and "Nasal" saccades.
+## Target variables
+The `y` variable returned by the `load_mlati` function contains the velocity waveforms for each saccade in the training dataset, and the `z` variable indicates the type of saccade. These data will be used as the target variables for regression and classification problems, respectively. In the figure below, I'm showing 30 samples (and the mean) of each "type" of saccade: "Not a saccade," "Temporal" saccades, and "Nasal" saccades.
 
 <p align="center">
   <img src="docs/imgs/saccade_waveforms.png" width="700" alt="Animated demo">
 </p>
 
-# Multi-layer perceptron
+# Modeling
+Below are some examples showcases various implementations of machine learning models and techniques.
+
+## Multi-layer perceptron
 I implemented a simple Multi-layer perceptron regressor using PyTorch which uses the same conventions for interfacing as Scikit-Learn's `MLPRegressor`.
 ```Python
 from saccade_decoder import mlp
