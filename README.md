@@ -7,7 +7,7 @@ For these analyses I'm using a dataset I collected during my PhD which can be do
 ## Loading training data
 Here is an example that demonstrates how to load the neural activity and eye velocity signals from a single experiment.
 ```Python
-from saccade_decoder import data
+from sdpy import data
 X, y, z = data.load_mlati(<path to h5 file>)
 ```
 The `load_mlati` function extracts spiking activity and eye velocity signals from the h5 files and organizes them into these ML-ready variables:
@@ -28,7 +28,7 @@ Below are some examples showcases various implementations of machine learning mo
 ## Multi-layer perceptron
 I implemented a simple Multi-layer perceptron regressor using PyTorch which uses the same conventions for interfacing as Scikit-Learn's `MLPRegressor`.
 ```Python
-from saccade_decoder import mlp
+from sdpy import mlp
 reg = mlp.PyTorchMLPRegressor()
 reg.fit(X, y)
 ```
