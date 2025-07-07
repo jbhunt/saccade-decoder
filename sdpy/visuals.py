@@ -7,54 +7,13 @@ from matplotlib import pyplot as plt
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
-def plot_velocity_waveforms(filename=None, xyz=None, t=None, n_samples=30, figsize=(8, 2.5), xticks=(-100, -50, 0, 50, 100)):
-    """
-    """
-
-    if xyz is None:
-        X, y, z = load_mlati(filename)
-    else:
-        X, y, z = xyz
-
-    fig, axs = plt.subplots(ncols=3, sharex=True, sharey=True)
-    if t is None:
-        t = np.arange(y.shape[1])
-
-    for ax, label, color in zip(axs, [0, -1, 1], ['0.5', 'C0', 'C1']):
-        samples = y[z == label, :]
-        index = np.random.choice(np.arange(samples.shape[0]), size=n_samples)
-        for yi in samples[index, :]:
-            v = yi / 0.005
-            ax.plot(t, v, color=color, alpha=0.15, lw=0.8)
-        ax.plot(t, samples[index, :].mean(0) / 0.005, color='k', lw=1)
-
-    xyz = (X, y, z)
-    axs[0].set_ylabel('Eye velocity (deg/s)')
-    for ax in axs:
-        ax.set_xlabel('Time (ms)')
-        for sp in ('top', 'right'):
-            ax.spines[sp].set_visible(False)
-    ylim = (
-        max(axs[0].get_ylim()) * -1,
-        max(axs[0].get_ylim())
-    )
-    for ax in axs:
-        ax.set_ylim(ylim)
-        ax.set_xticks(xticks)
-    for title, ax in zip(['Not a saccade (z=0)', 'Temporal (z=-1)', 'Nasal (z=1)'], axs):
-        ax.set_title(title, fontsize=10)
-    fig.set_figwidth(figsize[0])
-    fig.set_figheight(figsize[1])
-    fig.tight_layout()
-
-    return fig, axs, xyz
-
-def visualize_X(
+def visualize_Xyz(
     filename,
-    n_cols=30,
+    n_cols=11,
     figsize=(9, 4),
-    cmap='Blues',
-    vrange=(-1, 8),
+    cmap='pink_r',
+    X_vrange=(-7, 7),
+    y_vrange=(-1500, 1500),
     xyz=None
     ):
     """
@@ -75,53 +34,53 @@ def visualize_X(
     if n_cols is None:
         n_cols = n_splits
     fig, axs = plt.subplots(
-        ncols=n_cols,
+        ncols=n_cols + 2,
         nrows=3,
         gridspec_kw={'height_ratios': height_ratios}
     )
-    for ax in axs.flatten():
-        ax.set_xticks([])
-        ax.set_yticks([])
     index = np.argsort([
         sp[z != 0].max(1).mean() for sp in splits
     ])[::-1]
-    # index = np.random.choice(np.arange(len(splits)), size=n_splits, replace=False)
     splits = [splits[i] for i in index]
     for j, sp in enumerate(splits[:n_cols]):
         for i, l in enumerate([0, 1, 2]):
             m = sp[z == l, :]
             m = gaussian_filter(m, 1.5)
-            if vrange is None:
-                vmin, vmax = m.min(), m.max()
-            else:
-                vmin, vmax = vrange
+            vmin, vmax = X_vrange
             axs[i, j].pcolor(
                 m,
                 cmap=cmap,
                 vmin=vmin,
                 vmax=vmax
             )
+    cmap_ = plt.get_cmap(cmap, 3)
+    for i, l in enumerate([0, 1, 2]):
+        m = y[z == l] / 0.002
+        vmin, vmax = y_vrange
+        axs[i, n_cols].pcolor(m, cmap=cmap, vmin=vmin, vmax=vmax)
+        axs[i, n_cols + 1].add_patch(
+            plt.Rectangle([0, 0], 1, 1, color=cmap_(i))
+        )
+        axs[i, n_cols + 1].set_xlim([0, 1])
+        axs[i, n_cols + 1].set_ylim([0, 1])
     for ax in axs.flatten():
         for sp in ('top', 'right', 'bottom', 'left'):
             ax.spines[sp].set_visible(False)
+        ax.set_xticks([])
+        ax.set_yticks([])
     axs[0, 0].set_ylabel('0', rotation=0, labelpad=15)
     axs[1, 0].set_ylabel('1', rotation=0, labelpad=15)
     axs[2, 0].set_ylabel('2', rotation=0, labelpad=15)
-    for i, ax in enumerate(range(axs.shape[1])):
-        axs[0, i].set_title(f'{i + 1}', fontsize=10)
-    fig.suptitle('Unit #', fontsize=10)
     fig.supylabel('Label', fontsize=10)
+    axs[0, 5].set_title('X', fontsize=10)
+    axs[0, -2].set_title('y', fontsize=10)
+    axs[0, -1].set_title('z', fontsize=10)
     fig.set_figwidth(figsize[0])
     fig.set_figheight(figsize[1])
     fig.tight_layout()
-    fig.subplots_adjust(hspace=0.1, wspace=0.1)
+    fig.subplots_adjust(hspace=0.05, wspace=0.1)
 
     return fig, axs, (X, y, z)
-
-def visualize_y():
-    """
-    """
-    return
 
 def visualize_mlp_classifier_performance(
     data,
