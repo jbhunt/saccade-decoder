@@ -75,10 +75,10 @@ def _estimate_recording_epoch(
 
 def load_mlati(
     filename,
-    window=(-0.1, 0.1),
-    binsize_y=0.005,
-    binsize_x=0.05,
-    n_lagging_bins=(30, 0),
+    x_binsize=0.05,
+    x_bincounts=(6, 0),
+    y_binsize=0.002,
+    y_bincounts=(25, 45),
     p_max=0.05,
     fr_min=0.2,
     spike_timestamps=None,
@@ -115,14 +115,17 @@ def load_mlati(
         saccade_timestamps[:, 0],
         saccade_timestamps[:-1, 0] + (np.diff(saccade_timestamps[:, 0]) / 2)
     ])
+
+    #
     z = np.concatenate([
         saccade_labels,
         np.zeros(saccade_timestamps.size - 1)
     ])
+    z[z == -1] = 2
 
     # Collect the eye velocity waveforms for saccades 
     y = list()
-    t_eval = np.arange(window[0], window[1], binsize_y) + (binsize_y / 2)
+    t_eval = y_binsize * (np.arange(-1 * y_bincounts[0], y_bincounts[1], 1) + 0.5)
     for event_timestamp in event_timestamps:
         wf = np.interp(
             t_eval + event_timestamp,
@@ -151,23 +154,21 @@ def load_mlati(
                 pad=5   
             )
             spike_indices = np.where(spike_clusters == target_cluster)[0]
-            n_bins = int((t2 - t1) / binsize_x)
+            n_bins = int((t2 - t1) / x_binsize)
             n_spikes, bin_edges_ = np.histogram(
                 spike_timestamps[spike_indices],
                 range=(t1, t2),
                 bins=n_bins
             )
-            fr = n_spikes.mean() / binsize_x
+            fr = n_spikes.mean() / x_binsize
             if fr < fr_min:
                 unit_indices.append(i_unit)
         target_clusters = np.delete(target_clusters, unit_indices)
 
     # Compute the edges of the time bins centered on the saccade
-    bin_offsets = np.arange(-1 * n_lagging_bins[0], n_lagging_bins[1] + 1, 1)
-    bin_centers = bin_offsets * binsize_x
-    left_edges = np.around(bin_centers - (binsize_x / 2), 5)
-    right_edges = left_edges + binsize_x
-    bin_edges = np.concatenate([left_edges, right_edges[-1:]])
+    left_edges = np.arange(-1 * x_bincounts[0], x_bincounts[1], 1)
+    right_edges = left_edges + 1
+    all_edges = np.concatenate([left_edges, [right_edges[-1],]])
 
     # Compute histograms and store in response matrix of shape N units x M saccades x P time bins
     n_units = len(target_clusters)
@@ -180,23 +181,21 @@ def load_mlati(
         for event_timestamp in event_timestamps:
             n_spikes, bin_edges_ = np.histogram(
                 spike_timestamps[spike_indices],
-                bins=np.around(bin_edges + event_timestamp, 3)
+                bins=np.around(all_edges + event_timestamp, 3)
             )
-            fr = n_spikes / binsize_x
+            fr = n_spikes / x_binsize
             sample.append(fr)
         R.append(sample)
     R = np.array(R)
 
     # Populate response matrix
     X = list()
-    n_events = R.shape[1]
+    n_units, n_events, n_bins = R.shape
     for i_event in range(n_events):
         sample = list()
-        for bin_offset in bin_offsets:  # Outer loop over lags
-            for i_unit in range(n_units):  # Inner loop over neurons
-                bin_index = int((R.shape[2] - 1) / 2) + bin_offset
-                fr = R[i_unit, i_event, bin_index]
-                sample.append(fr)
+        for i_unit in range(n_units):
+            for i_bin in range(n_bins):
+                sample.append(R[i_unit, i_event, i_bin])
         X.append(sample)
     X = np.array(X)
 
