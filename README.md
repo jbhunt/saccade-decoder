@@ -34,7 +34,7 @@ clf_pt = mlp.PyTorchMLPClassifier()
 clf_pt.fit(X_train, y_train)
 y_predicted = clf_pt.predict(X_test)
 ```
-And as a sanity check, I compared the performance of my implementation with scikit-learn's `sklearn.neural_network.MPLClassifier` using cross-validation.
+And as a sanity check, I compared the cross-validated performance of my implementation with scikit-learn's `sklearn.neural_network.MPLClassifier` class.
 ```Python
 from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import cross_val_score
