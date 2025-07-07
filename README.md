@@ -8,12 +8,16 @@ For these analyses I'm using a dataset I collected during my PhD which can be do
 from sdpy import data
 X, y, z = data.load_mlati(<path to h5 file>)
 ```
-The `X` variable returned by the `load_mlati` function contains neural activity in a window of time around the onset of saccades. The matrix is organized neuron-major/bin-minor such that each row is formed by the concatenation of multiple single-trial peri-stimulus time histograms (PETHs); therefore, the size of the second dimension of `X` is the number of time bins in the PETHs x the number of neurons in the recording. The `y` variable returned by the `load_mlati` function contains the velocity waveforms for each saccade in the training dataset. Finally, the `z` variable indicates the type of saccade: 0 (Null), 1 (Nasal), or 2 (Temporal). Here is a plot that visualizes the first 440 columns of `X` (i.e., the first 11 neurons), all values of `y`, and all values of `z`. Samples are grouped by the type of saccade along the y-axis, and for `X`, individual neurons are grouped along the x-axis.
+The `sdpy.data.load_mlati` function returns 3 variables:
+- `X` - The `X` variable returned by the `load_mlati` function contains neural activity in a window of time around the onset of saccades. The matrix is organized neuron-major/bin-minor such that each row is formed by the concatenation of multiple single-trial peri-stimulus time histograms (PETHs); therefore, the size of the second dimension of `X` is the number of time bins in the PETHs x the number of neurons in the recording.
+- `y` - The `y` variable returned by the `load_mlati` function contains the velocity waveforms for each saccade in the training dataset.
+- `z` - The `z` variable indicates the type of saccade: 0 (Null), 1 (Nasal), or 2 (Temporal).
+
+Here is a plot that visualizes the first 440 columns of `X` (i.e., the first 11 neurons), all values of `y`, and all values of `z`. Samples are grouped by the type of saccade along the y-axis, and for `X`, individual neurons are grouped along the x-axis.
 
 <p align="center">
   <img src="docs/imgs/Xyz.png" width="700" alt="Animated demo">
 </p>
-It seems like most units respond to nasal and temporal saccades, some units exhibit a preference for one type of saccade, and there is no response to the null events.
 
 # Modeling
 Below are some examples showcases various implementations of machine learning models and techniques applied to this dataset.
