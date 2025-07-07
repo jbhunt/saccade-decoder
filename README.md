@@ -86,4 +86,4 @@ On my machine, the Scikit-learn implementation is ~75% accuracte and my implemen
   <img src="docs/imgs/mlp_classifier_performance.png" width="700" alt="Animated demo">
 </p>
 
-It seems like both models do pretty well identifying non-saccadic events (z=0), but they struggle with identifying the direction of saccades (z=1, z=2).
+Both models do pretty well decoding the type of saccade using neural activity.
