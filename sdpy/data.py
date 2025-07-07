@@ -75,24 +75,30 @@ def _estimate_recording_epoch(
 
 def load_mlati(
     filename,
-    x_binsize=0.05,
-    x_bincounts=(6, 0),
+    X_binsize=0.01,
+    X_bincounts=(20, 20),
     y_binsize=0.002,
     y_bincounts=(25, 45),
-    p_max=0.05,
-    fr_min=0.2,
-    spike_timestamps=None,
+    p_max=1e-3,
+    fr_min=1,
+    standardize_firing_rate=True,
+    add_null_events=True,
+    resample_spike_timestamps=False,
+    shuffle_labels=False,
+    random_seed=42,
     ):
     """
     """
+
+    #
+    np.random.seed(random_seed)
 
     # Load all the required datasets from the h5 file
     with h5py.File(filename, 'r') as stream:
         eye_position = np.array(stream['pose/filtered'])[:, 0]
         n_frames_recorded = len(eye_position)
         frame_timestamps = np.array(stream['frames/left/timestamps'])[:n_frames_recorded]
-        if spike_timestamps is None:
-            spike_timestamps = np.array(stream[f'spikes/timestamps'])
+        spike_timestamps = np.array(stream[f'spikes/timestamps'])
         spike_clusters = np.array(stream[f'spikes/clusters'])
         p_values = np.vstack([
             np.array(stream['zeta/saccade/nasal/p']),
@@ -101,27 +107,58 @@ def load_mlati(
         saccade_timestamps = np.array(stream['saccades/predicted/left/timestamps'])
         saccade_labels = np.array(stream['saccades/predicted/left/labels'])
 
-    # NOTE: Sometimes there are different numbers of frames and timestamps which will preclude this analysis
+    # For some experiments there are different numbers of frames and timestamps which will preclude further processing
     if frame_timestamps.size != eye_position.size:
-        raise Exception(f'Different number of frames ({eye_position.size}) and timestamps ({frame_timestamps.size})')
+        raise Exception(f'Different number of frames ({eye_position.size}) and frame timestamps ({frame_timestamps.size})')
+    
+    # Drop saccades without timestamps
+    invalid_saccades = np.isnan(saccade_timestamps[:, 0])
+    saccade_labels = np.delete(saccade_labels, invalid_saccades)
+    saccade_timestamps = np.delete(saccade_timestamps[:, 0], invalid_saccades)
+
+    # Resample spike timestamps using a uniform distribution (optional)
+    if resample_spike_timestamps == True:
+        spike_timestamps = np.around(np.random.uniform(
+            low=spike_timestamps.min(),
+            high=spike_timestamps.max(),
+            size=spike_timestamps.size
+        ), 3).astype(spike_timestamps.dtype)
+
+    # Mix in "null" events (optional)
+    if add_null_events:
+        n_null_events = round(np.mean([np.sum(saccade_labels == -1), np.sum(saccade_labels ==1)]))
+        null_event_timestamps = np.random.uniform(
+            low=saccade_timestamps.min(),
+            high=saccade_timestamps.max(),
+            size=n_null_events
+        )
+        event_timestamps = np.concatenate([
+            saccade_timestamps,
+            null_event_timestamps
+        ])
+    else:
+        event_timestamps = saccade_timestamps
+    
+    # Re-code temporal saccades as 2 (instead of -1)
+    z = np.concatenate([
+        saccade_labels,
+        np.zeros(n_null_events)
+    ])
+    z[z == -1] = 2
+
+    # Sort by time
+    index = np.argsort(event_timestamps)
+    event_timestamps = event_timestamps[index]
+    z = z[index]
+
+    # Shuffle saccade labels (optional)
+    if shuffle_labels:
+        np.random.shuffle(z)
 
     # Create the eye position time series
     t_raw = frame_timestamps[:-1] + (np.diff(frame_timestamps) / 2)
     v_raw = np.diff(eye_position)
     v_raw[np.isnan(v_raw)] = np.interp(t_raw[np.isnan(v_raw)], t_raw, v_raw) # Impute with interpolation
-
-    #
-    event_timestamps = np.concatenate([
-        saccade_timestamps[:, 0],
-        saccade_timestamps[:-1, 0] + (np.diff(saccade_timestamps[:, 0]) / 2)
-    ])
-
-    #
-    z = np.concatenate([
-        saccade_labels,
-        np.zeros(saccade_timestamps.size - 1)
-    ])
-    z[z == -1] = 2
 
     # Collect the eye velocity waveforms for saccades 
     y = list()
@@ -143,7 +180,7 @@ def load_mlati(
         cluster_indices = np.arange(len(unique_clusters))[p_values <= p_max]
         target_clusters = unique_clusters[cluster_indices] 
 
-    # Exclude units with too low of a firing rate (probabily partial units)
+    # Exclude units with too low of a firing rate
     if fr_min is not None:
         unit_indices = list()
         for i_unit, target_cluster in enumerate(target_clusters):
@@ -154,21 +191,23 @@ def load_mlati(
                 pad=5   
             )
             spike_indices = np.where(spike_clusters == target_cluster)[0]
-            n_bins = int((t2 - t1) / x_binsize)
+            n_bins = int((t2 - t1) / X_binsize)
             n_spikes, bin_edges_ = np.histogram(
                 spike_timestamps[spike_indices],
                 range=(t1, t2),
                 bins=n_bins
             )
-            fr = n_spikes.mean() / x_binsize
-            if fr < fr_min:
+            fr = n_spikes / X_binsize
+            
+            #
+            if fr.mean() < fr_min:
                 unit_indices.append(i_unit)
         target_clusters = np.delete(target_clusters, unit_indices)
 
     # Compute the edges of the time bins centered on the saccade
-    left_edges = np.arange(-1 * x_bincounts[0], x_bincounts[1], 1)
+    left_edges = np.arange(-1 * X_bincounts[0], X_bincounts[1], 1)
     right_edges = left_edges + 1
-    all_edges = np.concatenate([left_edges, [right_edges[-1],]])
+    all_edges = np.concatenate([left_edges, [right_edges[-1],]]) * X_binsize
 
     # Compute histograms and store in response matrix of shape N units x M saccades x P time bins
     n_units = len(target_clusters)
@@ -183,12 +222,12 @@ def load_mlati(
                 spike_timestamps[spike_indices],
                 bins=np.around(all_edges + event_timestamp, 3)
             )
-            fr = n_spikes / x_binsize
+            fr = n_spikes / X_binsize
             sample.append(fr)
         R.append(sample)
     R = np.array(R)
 
-    # Populate response matrix
+    # Populate X (unit major)
     X = list()
     n_units, n_events, n_bins = R.shape
     for i_event in range(n_events):
@@ -199,14 +238,18 @@ def load_mlati(
         X.append(sample)
     X = np.array(X)
 
-    # Sort by time
-    index = np.argsort(event_timestamps)
-    X = X[index, :]
-    y = y[index]
-    z = z[index]
-
-    # Normalize firing rate
-    X = MinMaxScaler().fit_transform(X)
+    # Standardize firing rate
+    if standardize_firing_rate:
+        n_samples = X.shape[0]
+        splits = np.split(X, n_units, axis=1)
+        splits_standardized = list()
+        for i_unit, split in enumerate(splits):
+            fr_mean = split[z == 0, :].mean()
+            fr_std = split[z == 0, :].std()
+            split_standardized = (split - fr_mean) / fr_std
+            split_standardized = split_standardized.reshape(n_samples, -1)
+            splits_standardized.append(split_standardized)
+        X = np.hstack(splits_standardized)
 
     # Remove samples with NaN values
     mask = np.vstack([
@@ -219,18 +262,3 @@ def load_mlati(
     z = np.delete(z, mask)
 
     return X, y, z
-
-def jitter_spike_timestamps(
-    filename,
-    j_min=-3,
-    j_max=3,
-    ):
-    """
-    Apply temporal jitter to spike timestamps
-    """
-
-    with h5py.File(filename, 'r') as stream:
-        spike_timestamps = np.array(stream[f'spikes/timestamps'])
-    spike_timestamps_jittered = spike_timestamps + np.random.uniform(low=j_min, high=j_max, size=spike_timestamps.size)
-
-    return spike_timestamps_jittered

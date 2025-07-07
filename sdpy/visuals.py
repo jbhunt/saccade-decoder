@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from matplotlib import pyplot as plt
 import numpy as np
+from scipy.ndimage import gaussian_filter
 
 def plot_velocity_waveforms(filename=None, xyz=None, t=None, n_samples=30, figsize=(8, 2.5), xticks=(-100, -50, 0, 50, 100)):
     """
@@ -48,17 +49,78 @@ def plot_velocity_waveforms(filename=None, xyz=None, t=None, n_samples=30, figsi
 
     return fig, axs, xyz
 
-def visualize_mlp_regressor_performance(
-    data=None
+def visualize_X(
+    filename,
+    n_cols=30,
+    figsize=(9, 4),
+    cmap='Blues',
+    vrange=(-1, 8),
+    xyz=None
     ):
     """
     """
 
-    if type(data) == str:
-        X, y, z = load_mlati(data)
-    elif type(data) == tuple:
-        X, y, z = data
+    if xyz is None:
+        X, y, z = load_mlati(filename, X_bincounts=(20, 20))
+    else:
+        X, y, z = xyz
+    n_bins = 40
+    n_splits = X.shape[1] // n_bins
+    splits = np.split(X, n_splits, axis=1)
+    height_ratios = (
+        np.sum(z == 0),
+        np.sum(z == 1),
+        np.sum(z == 2)
+    )
+    if n_cols is None:
+        n_cols = n_splits
+    fig, axs = plt.subplots(
+        ncols=n_cols,
+        nrows=3,
+        gridspec_kw={'height_ratios': height_ratios}
+    )
+    for ax in axs.flatten():
+        ax.set_xticks([])
+        ax.set_yticks([])
+    index = np.argsort([
+        sp[z != 0].max(1).mean() for sp in splits
+    ])[::-1]
+    # index = np.random.choice(np.arange(len(splits)), size=n_splits, replace=False)
+    splits = [splits[i] for i in index]
+    for j, sp in enumerate(splits[:n_cols]):
+        for i, l in enumerate([0, 1, 2]):
+            m = sp[z == l, :]
+            m = gaussian_filter(m, 1.5)
+            if vrange is None:
+                vmin, vmax = m.min(), m.max()
+            else:
+                vmin, vmax = vrange
+            axs[i, j].pcolor(
+                m,
+                cmap=cmap,
+                vmin=vmin,
+                vmax=vmax
+            )
+    for ax in axs.flatten():
+        for sp in ('top', 'right', 'bottom', 'left'):
+            ax.spines[sp].set_visible(False)
+    axs[0, 0].set_ylabel('0', rotation=0, labelpad=15)
+    axs[1, 0].set_ylabel('1', rotation=0, labelpad=15)
+    axs[2, 0].set_ylabel('2', rotation=0, labelpad=15)
+    for i, ax in enumerate(range(axs.shape[1])):
+        axs[0, i].set_title(f'{i + 1}', fontsize=10)
+    fig.suptitle('Unit #', fontsize=10)
+    fig.supylabel('Label', fontsize=10)
+    fig.set_figwidth(figsize[0])
+    fig.set_figheight(figsize[1])
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.1, wspace=0.1)
 
+    return fig, axs, (X, y, z)
+
+def visualize_y():
+    """
+    """
     return
 
 def visualize_mlp_classifier_performance(
@@ -118,4 +180,4 @@ def visualize_mlp_classifier_performance(
     cax.set_ylabel('Frac. of predictions (per class)', rotation=270, labelpad=20)
     cax.yaxis.set_label_position('right')  
 
-    return fig, axs, cm_pt, cm_sk
+    return fig, axs, clf_pt, clf_sk

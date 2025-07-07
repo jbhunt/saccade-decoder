@@ -313,15 +313,3 @@ class PyTorchMLPClassifier(BaseEstimator, ClassifierMixin, _BasePyTorchModel):
         probability = np.array(logits.softmax(dim=1).detach())
 
         return probability
-
-def visualize_regressor_performance():
-    """
-    """
-
-    return
-
-def visualize_classifier_performance():
-    """
-    """
-
-    return
