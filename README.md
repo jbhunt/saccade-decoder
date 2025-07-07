@@ -20,7 +20,7 @@ Here is a plot that visualizes the first 440 columns of `X` (i.e., the first 11 
 </p>
 
 # Modeling
-Below are some examples showcases various implementations of machine learning models and techniques applied to this dataset.
+Below are some examples showcasing various implementations of machine learning models and techniques applied to this dataset.
 
 ### Predicting saccade type with a multi-layer perceptron
 I wanted to see if I could use per-saccadic single-unit spiking to predict 1.) if the animal made a saccade and 2.) the direction of each saccade that was made. To do this, I implemented an Multi-layer perceptron (MLP) classifier with PyTorch. You can find the implementation here: `sdpy.mlp.PyTorchMLPClassifier`. My implementation of a MLP for classification emulates the design and interface used by scikit-learn, i.e., it has both a `fit` and `predict` method.
