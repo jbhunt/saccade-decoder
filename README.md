@@ -13,7 +13,7 @@ The `sdpy.data.load_mlati` function returns 3 variables:
 - `y` - The `y` variable contains the velocity waveforms (in deg/s) for each saccade.
 - `z` - The `z` variable indicates the type of saccade: 0 (Null), 1 (Nasal), or 2 (Temporal).
 
-Here is a plot that visualizes the first 500 columns of `X` (i.e, the first 25 neurons), all values of `y`, and all values of `z`. Samples are grouped by the type of saccade along the y-axis, and for `X`, individual neurons are indicated with a dotted black line.
+Here is a plot that visualizes the first 500 columns of `X` (i.e, the first 25 neurons), all values of `y`, and all values of `z`. Samples are grouped by the type of saccade along the y-axis, and for `X`, boundaries between individual neurons are indicated with a dotted black line.
 
 <p align="center">
   <img src="docs/imgs/Xyz.png" width="700" alt="Animated demo">
@@ -23,7 +23,7 @@ Here is a plot that visualizes the first 500 columns of `X` (i.e, the first 25 n
 Below are some examples showcasing various implementations of machine learning models and techniques applied to this dataset.
 
 ### Predicting saccade type with a multi-layer perceptron
-I wanted to see if I could use per-saccadic single-unit spiking to predict 1.) if the animal made a saccade and 2.) the direction of each saccade that was made. To do this, I implemented an Multi-layer perceptron (MLP) classifier with PyTorch. You can find the implementation [here](https://github.com/jbhunt/saccade-decoder/blob/7556287ea31d8e364d5fe4fc0428b654b108bed8/sdpy/mlp.py#L197). My implementationd - `sdpy.mpl.PyTorchMLPClassifier` - emulates the design and interface used by scikit-learn. For example, this class has both a `fit` and `predict` method.
+I wanted to see if I could use peri-saccadic single-unit spiking to predict 1.) if the animal made a saccade and 2.) the direction of each saccade that was made. To do this, I implemented an Multi-layer perceptron (MLP) classifier with PyTorch. You can find the implementation [here](https://github.com/jbhunt/saccade-decoder/blob/7556287ea31d8e364d5fe4fc0428b654b108bed8/sdpy/mlp.py#L197). My implementationd - `sdpy.mpl.PyTorchMLPClassifier` - emulates the design and interface used by scikit-learn. For example, this class has both a `fit` and `predict` method.
 ```Python
 from sdpy import mlp, data
 from sklearn.model_selection import train_test_split
@@ -36,7 +36,7 @@ y_predicted = clf_pt.predict(X_test)
 And as a sanity check, I compared the cross-validated performance of my implementation with scikit-learn's `sklearn.neural_network.MPLClassifier` class.
 ```Python
 from sklearn.neural_network import MLPClassifier
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, accuracy_score
 from sklearn.metrics import make_scorer
 clf_sk = MLPClassifier(solver='adam', max_iter=1000) # Set hyperparameters to match my implementation for a fair comparison
 acc_score_pt = cross_val_score(clf_pt, X, z, scoring=make_scorer(accuracy_score), cv=5).mean() # returns 0.85
