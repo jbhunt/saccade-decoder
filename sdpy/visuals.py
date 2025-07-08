@@ -12,73 +12,106 @@ def visualize_Xyz(
     n_cols=11,
     figsize=(9, 4),
     cmap='pink_r',
-    X_vrange=(-7, 7),
+    X_vrange=(-8, 8),
     y_vrange=(-1500, 1500),
-    xyz=None
+    X_sigma=1.5,
+    y_sigma=1.5,
+    xyz=None,
+    **load_mlati_kwargs
     ):
     """
     """
 
+    _load_mlati_kwargs = {
+        'X_bincounts': (20, 20),
+        'X_binsize': 0.01,
+        'y_bincounts': (25, 45),
+        'y_binsize': 0.002,
+    }
+    _load_mlati_kwargs.update(load_mlati_kwargs)
     if xyz is None:
-        X, y, z = load_mlati(filename, X_bincounts=(20, 20))
+        X, y, z = load_mlati(filename, **load_mlati_kwargs)
     else:
         X, y, z = xyz
-    n_bins = 40
-    n_splits = X.shape[1] // n_bins
-    splits = np.split(X, n_splits, axis=1)
+
+    # Initialize plot
+    n_bins = np.sum(_load_mlati_kwargs['X_bincounts'])
+    n_units = X.shape[1] // n_bins
     height_ratios = (
         np.sum(z == 0),
         np.sum(z == 1),
         np.sum(z == 2)
     )
-    if n_cols is None:
-        n_cols = n_splits
-    fig, axs = plt.subplots(
-        ncols=n_cols + 2,
-        nrows=3,
-        gridspec_kw={'height_ratios': height_ratios}
+    width_ratios = (
+        n_bins * n_cols, # * _load_mlati_kwargs['X_binsize'],
+        np.sum(_load_mlati_kwargs['y_bincounts']), # * _load_mlati_kwargs['y_binsize'],
+        5 # 0.05,
     )
+    fig, axs = plt.subplots(
+        ncols=3,
+        nrows=3,
+        gridspec_kw={'height_ratios': height_ratios, 'width_ratios': width_ratios}
+    )
+
+    # Reorder X
+    splits = np.split(X, n_units, axis=1)
     index = np.argsort([
         sp[z != 0].max(1).mean() for sp in splits
     ])[::-1]
-    splits = [splits[i] for i in index]
-    for j, sp in enumerate(splits[:n_cols]):
-        for i, l in enumerate([0, 1, 2]):
-            m = sp[z == l, :]
-            m = gaussian_filter(m, 1.5)
-            vmin, vmax = X_vrange
-            axs[i, j].pcolor(
-                m,
-                cmap=cmap,
-                vmin=vmin,
-                vmax=vmax
-            )
-    cmap_ = plt.get_cmap(cmap, 3)
+    splits_reordered = [splits[i] for i in index][:n_cols]
+    X_reordered = np.hstack(splits_reordered)
+
+    # Plot X
+    vmin, vmax = X_vrange
     for i, l in enumerate([0, 1, 2]):
-        m = y[z == l] / 0.002
-        vmin, vmax = y_vrange
-        axs[i, n_cols].pcolor(m, cmap=cmap, vmin=vmin, vmax=vmax)
-        axs[i, n_cols + 1].add_patch(
-            plt.Rectangle([0, 0], 1, 1, color=cmap_(i))
+        axs[i, 0].pcolor(
+            gaussian_filter(X_reordered[z == l, :], X_sigma),
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax
         )
-        axs[i, n_cols + 1].set_xlim([0, 1])
-        axs[i, n_cols + 1].set_ylim([0, 1])
+
+    # Plot y 
+    cmap_fn = plt.get_cmap(cmap, 3)
+    vmin, vmax = y_vrange
+    for i, (c, l) in enumerate(zip([1, 2, 0], [0, 1, 2])):
+        axs[i, 1].pcolor(
+            gaussian_filter(y[z == l] / _load_mlati_kwargs['y_binsize'], y_sigma),
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax
+        )
+        axs[i, 2].add_patch(
+            plt.Rectangle([0, 0], 1, 1, color=cmap_fn(c))
+        )
+        axs[i, 2].set_xlim([0, 1])
+        axs[i, 2].set_ylim([0, 1])
+
+    #
+    for i in range(3):
+        y1, y2 = axs[i, 0].get_ylim()
+        for x0 in range(0, n_cols * n_bins, n_bins)[:-1]:
+            x1 = x0 + n_bins
+            axs[i, 0].vlines(x1, y1, y2, color='k', alpha=0.5, linestyle=':', lw=1)
+        axs[i, 0].set_ylim([y1, y2])
+
+    # Clean up
     for ax in axs.flatten():
-        for sp in ('top', 'right', 'bottom', 'left'):
-            ax.spines[sp].set_visible(False)
+        # for sp in ('top', 'right', 'bottom', 'left'):
+        #     ax.spines[sp].set_visible(False)
         ax.set_xticks([])
         ax.set_yticks([])
     axs[0, 0].set_ylabel('0', rotation=0, labelpad=15)
     axs[1, 0].set_ylabel('1', rotation=0, labelpad=15)
     axs[2, 0].set_ylabel('2', rotation=0, labelpad=15)
     fig.supylabel('Label', fontsize=10)
-    axs[0, 5].set_title('X', fontsize=10)
-    axs[0, -2].set_title('y', fontsize=10)
-    axs[0, -1].set_title('z', fontsize=10)
+    axs[0, 0].set_title('X', fontsize=10)
+    axs[0, 1].set_title('y', fontsize=10)
+    axs[0, 2].set_title('z', fontsize=10)
     fig.set_figwidth(figsize[0])
     fig.set_figheight(figsize[1])
     fig.tight_layout()
-    fig.subplots_adjust(hspace=0.05, wspace=0.1)
+    fig.subplots_adjust(hspace=0.05, wspace=0.025)
 
     return fig, axs, (X, y, z)
 

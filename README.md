@@ -13,7 +13,7 @@ The `sdpy.data.load_mlati` function returns 3 variables:
 - `y` - The `y` variable contains the velocity waveforms (in deg/s) for each saccade.
 - `z` - The `z` variable indicates the type of saccade: 0 (Null), 1 (Nasal), or 2 (Temporal).
 
-Here is a plot that visualizes the first 440 columns of `X` (i.e., the first 11 neurons), all values of `y`, and all values of `z`. Samples are grouped by the type of saccade along the y-axis, and for `X`, individual neurons are grouped along the x-axis.
+Here is a plot that visualizes the first 500 columns of `X` (i.e, the first 25 neurons), all values of `y`, and all values of `z`. Samples are grouped by the type of saccade along the y-axis, and for `X`, individual neurons are indicated with a dotted black line.
 
 <p align="center">
   <img src="docs/imgs/Xyz.png" width="700" alt="Animated demo">
