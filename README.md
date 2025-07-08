@@ -9,8 +9,8 @@ from sdpy import data
 X, y, z = data.load_mlati(<path to h5 file>)
 ```
 The `sdpy.data.load_mlati` function returns 3 variables:
-- `X` - The `X` variable returned by the `load_mlati` function contains neural activity in a window of time around the onset of saccades. The matrix is organized neuron-major/bin-minor such that each row is formed by the concatenation of multiple single-trial peri-stimulus time histograms (PETHs); therefore, the size of the second dimension of `X` is the number of time bins in the PETHs x the number of neurons in the recording.
-- `y` - The `y` variable returned by the `load_mlati` function contains the velocity waveforms for each saccade in the training dataset.
+- `X` - The `X` variable contains neural activity in a window of time around the onset of saccades. The matrix is organized neuron-major/bin-minor such that each row is formed by the concatenation of multiple single-trial peri-stimulus time histograms (PETHs). Therefore, the size of the second dimension of `X` is the number of time bins in the PETHs x the number of neurons in the recording.
+- `y` - The `y` variable contains the velocity waveforms (in deg/s) for each saccade.
 - `z` - The `z` variable indicates the type of saccade: 0 (Null), 1 (Nasal), or 2 (Temporal).
 
 Here is a plot that visualizes the first 440 columns of `X` (i.e., the first 11 neurons), all values of `y`, and all values of `z`. Samples are grouped by the type of saccade along the y-axis, and for `X`, individual neurons are grouped along the x-axis.
@@ -23,11 +23,10 @@ Here is a plot that visualizes the first 440 columns of `X` (i.e., the first 11 
 Below are some examples showcasing various implementations of machine learning models and techniques applied to this dataset.
 
 ### Predicting saccade type with a multi-layer perceptron
-I wanted to see if I could use per-saccadic single-unit spiking to predict 1.) if the animal made a saccade and 2.) the direction of each saccade that was made. To do this, I implemented an Multi-layer perceptron (MLP) classifier with PyTorch. You can find the implementation here: `sdpy.mlp.PyTorchMLPClassifier`. My implementation of a MLP for classification emulates the design and interface used by scikit-learn, i.e., it has both a `fit` and `predict` method.
+I wanted to see if I could use per-saccadic single-unit spiking to predict 1.) if the animal made a saccade and 2.) the direction of each saccade that was made. To do this, I implemented an Multi-layer perceptron (MLP) classifier with PyTorch. You can find the implementation [here](https://github.com/jbhunt/saccade-decoder/blob/7556287ea31d8e364d5fe4fc0428b654b108bed8/sdpy/mlp.py#L197). My implementationd - `sdpy.mpl.PyTorchMLPClassifier` - emulates the design and interface used by scikit-learn. For example, this class has both a `fit` and `predict` method.
 ```Python
 from sdpy import mlp, data
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
 X, y, z = data.load_mlati(<path to h5 file>)
 X_train, X_test, y_train, y_test = test_train_split(X, z, test_size=0.2)
 clf_pt = mlp.PyTorchMLPClassifier()
