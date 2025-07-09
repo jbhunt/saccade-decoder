@@ -173,3 +173,82 @@ def visualize_mlp_classifier_performance(
     cax.yaxis.set_label_position('right')  
 
     return fig, axs, clf_pt, clf_sk
+
+def visualize_mlp_regressor_performance(
+    data,
+    cmap='Blues',
+    vrange=(-1500, 1500),
+    figsize=(7.5, 3)
+    ):
+    """
+    """
+
+    #
+    if type(data) == str:
+        X, y, z = load_mlati(data)
+    elif type(data) == tuple:
+        X, y, z = data
+
+    X_train, X_test, y_train, y_test, z_train, z_test = train_test_split(
+        X, y, z,
+        test_size=0.2
+    )
+    y_train = y_train / 0.002
+    y_test = y_test / 0.002
+
+    #
+    reg_pt = PyTorchMLPRegressor()
+    reg_pt.fit(X_train, y_train)
+    y_predicted_pt = reg_pt.predict(X_test)
+    reg_sk = MLPRegressor(solver='adam', max_iter=1000)
+    reg_sk.fit(X_train, y_train)
+    y_predicted_sk = reg_sk.predict(X_test)
+
+    #
+    height_ratios = [
+        np.sum(z_test == 0),
+        np.sum(z_test == 1),
+        np.sum(z_test == 2)
+    ]
+    fig, axs = plt.subplots(
+        nrows=3,
+        ncols=5,
+        sharex=True,
+        gridspec_kw={'height_ratios': height_ratios}
+    )
+    for i, l in enumerate([0, 1, 2]):
+        residuals_sk = y_test[z_test == l] - y_predicted_sk[z_test == l]
+        residuals_pt = y_test[z_test == l] - y_predicted_pt[z_test == l]
+        index = np.argsort(np.abs(residuals_pt).sum(1))
+        axs[i, 0].pcolor(y_test[z_test == l][index], vmin=vrange[0], vmax=vrange[1], cmap=cmap)
+        axs[i, 1].pcolor(y_predicted_sk[z_test == l][index], vmin=vrange[0], vmax=vrange[1], cmap=cmap)
+        axs[i, 2].pcolor(y_predicted_pt[z_test == l][index], vmin=vrange[0], vmax=vrange[1], cmap=cmap)
+        axs[i, 3].pcolor(
+            residuals_sk,
+            vmin=vrange[0],
+            vmax=vrange[1],
+            cmap=cmap
+        )
+        axs[i, 4].pcolor(
+            residuals_pt,
+            vmin=vrange[0],
+            vmax=vrange[1],
+            cmap=cmap
+        )
+    
+    #
+    for ax in axs.flatten():
+        ax.set_xticks([])
+        ax.set_yticks([])
+    axs[0, 0].set_ylabel('0', rotation=0, labelpad=15)
+    axs[1, 0].set_ylabel('1', rotation=0, labelpad=15)
+    axs[2, 0].set_ylabel('2', rotation=0, labelpad=15)
+    fig.supylabel('Label', fontsize=10)
+    for j, t in enumerate([r'$y_{\text{test}}$', r'$y_{\text{pred (scikit-learn)}}$', r'$y_{\text{pred (PyTorch)}}$', r'Res. (scikit-learn)', r'Res. (PyTorch)}']):
+        axs[0, j].set_title(t, fontsize=10)
+    fig.set_figwidth(figsize[0])
+    fig.set_figheight(figsize[1])
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.1, wspace=0.1)
+
+    return fig, axs

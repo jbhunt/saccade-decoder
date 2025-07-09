@@ -22,7 +22,7 @@ class _MultiLayerPerceptron(nn.Module):
         for i_layer in range(n_layers):
             s1 = hidden_layer_sizes[i_layer]
             if i_layer + 1 < n_layers:
-                s2 = hidden_layer_sizes[n_layers + 1]
+                s2 = hidden_layer_sizes[i_layer + 1]
                 layers.append(nn.Linear(s1, s2))
                 layers.append(nn.ReLU())
             else:
@@ -78,121 +78,6 @@ class _BasePyTorchModel():
         """
 
         return self._fit(X, y)
-    
-class PyTorchMLPRegressor(BaseEstimator, RegressorMixin, _BasePyTorchModel):
-    """
-    """
-    
-    def _fit(self, X, y):
-        """
-        """
-
-        Xt = torch.tensor(X, dtype=torch.float32).to(self.device)
-        yt = torch.tensor(y, dtype=torch.float32).to(self.device)
-
-        #
-        output_layer_size = yt.shape[1]
-        self.ann = _MultiLayerPerceptron(
-            Xt.shape[1],
-            output_layer_size,
-            self.hidden_layer_sizes
-        ).to(self.device)
-
-        # Declare train and test indices
-        n_samples = X.shape[0]
-        if self.early_stopping:
-            train_index = np.random.choice(
-                np.arange(n_samples),
-                size=int(round(n_samples * (1 - self.hold_out_fraction))),
-                replace=False
-            )
-            test_index = np.array([i for i in np.arange(n_samples) if i not in train_index])
-        else:
-            train_index = np.arange(n_samples)
-            test_index = None
-
-        #
-        loss_function = nn.MSELoss()
-        optimizer = optim.Adam(
-            self.ann.parameters(),
-            lr=self.lr,
-            weight_decay=self.alpha
-        )
-        self.performance = {
-            'train': np.full(self.max_epochs, np.nan),
-            'test': np.full(self.max_epochs, np.nan),
-        }
-        loss_minimum = np.inf
-        loss_current_epoch_train = None
-        loss_current_epoch_test = None
-        best_epoch = None
-
-        # Main training loop
-        for i_epoch in range(self.max_epochs):
-
-            # Training step
-            self.ann.train()
-            predictions = self.ann(Xt[train_index])
-            loss_obj = loss_function(predictions, yt[train_index])
-            optimizer.zero_grad()
-            loss_obj.backward()
-            optimizer.step()
-
-            # Monitor performance
-            self.ann.eval()
-            with torch.no_grad():
-
-                # Train dataset
-                predictions = self.ann(Xt[train_index])
-                loss_obj = loss_function(predictions, yt[train_index])
-                loss_current_epoch_train = loss_obj.item()
-                self.performance['train'][i_epoch] = loss_current_epoch_train
-
-                # Test dataset
-                if self.early_stopping:
-                    predictions = self.ann(Xt[test_index])
-                    loss_obj = loss_function(predictions, yt[test_index])
-                    loss_current_epoch_test = loss_obj.item()
-                    self.performance['test'][i_epoch] = loss_current_epoch_test
-
-            # If measuring test performance for early stopping
-            if self.early_stopping:
-                loss_current_epoch = loss_current_epoch_test
-            else:
-                loss_current_epoch = loss_current_epoch_train
-
-            # Stop early if change in loss is slowing down or worsening (to prevent overfitting)
-            if loss_current_epoch - loss_minimum < self.tolerance:
-                best_epoch = i_epoch
-                state_dict = self.ann.state_dict()
-                loss_minimum = loss_current_epoch
-                n_epochs_without_improvement = 0
-            else:
-                n_epochs_without_improvement += 1
-
-            #
-            if self.early_stopping and (n_epochs_without_improvement > self.patience):
-                break
-
-        # Load the best model
-        self.ann.load_state_dict(state_dict)
-        self.best_epoch = best_epoch
-
-        return self
-    
-    def predict(self, X):
-        """
-        """
-
-        y_predicted = np.array(self.ann(torch.tensor(X, dtype=torch.float32).to(self.device)).cpu().detach())
-
-        return y_predicted
-
-    def predict_proba(self, X):
-        """
-        """
-
-        return
     
 class PyTorchMLPClassifier(BaseEstimator, ClassifierMixin, _BasePyTorchModel):
     """
@@ -313,3 +198,112 @@ class PyTorchMLPClassifier(BaseEstimator, ClassifierMixin, _BasePyTorchModel):
         probability = np.array(logits.softmax(dim=1).detach())
 
         return probability
+    
+class PyTorchMLPRegressor(BaseEstimator, RegressorMixin, _BasePyTorchModel):
+    """
+    """
+    
+    def _fit(self, X, y):
+        """
+        """
+
+        Xt = torch.tensor(X, dtype=torch.float32).to(self.device)
+        yt = torch.tensor(y, dtype=torch.float32).to(self.device)
+
+        #
+        output_layer_size = yt.shape[1]
+        self.ann = _MultiLayerPerceptron(
+            Xt.shape[1],
+            output_layer_size,
+            self.hidden_layer_sizes
+        ).to(self.device)
+
+        # Declare train and test indices
+        n_samples = X.shape[0]
+        if self.early_stopping:
+            train_index = np.random.choice(
+                np.arange(n_samples),
+                size=int(round(n_samples * (1 - self.hold_out_fraction))),
+                replace=False
+            )
+            test_index = np.array([i for i in np.arange(n_samples) if i not in train_index])
+        else:
+            train_index = np.arange(n_samples)
+            test_index = None
+
+        #
+        loss_function = nn.MSELoss()
+        optimizer = optim.Adam(
+            self.ann.parameters(),
+            lr=self.lr,
+            weight_decay=self.alpha
+        )
+        self.performance = {
+            'train': np.full(self.max_epochs, np.nan),
+            'test': np.full(self.max_epochs, np.nan),
+        }
+        loss_minimum = np.inf
+        loss_current_epoch_train = None
+        loss_current_epoch_test = None
+        best_epoch = None
+
+        # Main training loop
+        for i_epoch in range(self.max_epochs):
+
+            # Training step
+            self.ann.train()
+            predictions = self.ann(Xt[train_index])
+            loss_obj = loss_function(predictions, yt[train_index])
+            optimizer.zero_grad()
+            loss_obj.backward()
+            optimizer.step()
+
+            # Monitor performance
+            self.ann.eval()
+            with torch.no_grad():
+
+                # Train dataset
+                predictions = self.ann(Xt[train_index])
+                loss_obj = loss_function(predictions, yt[train_index])
+                loss_current_epoch_train = loss_obj.item()
+                self.performance['train'][i_epoch] = loss_current_epoch_train
+
+                # Test dataset
+                if self.early_stopping:
+                    predictions = self.ann(Xt[test_index])
+                    loss_obj = loss_function(predictions, yt[test_index])
+                    loss_current_epoch_test = loss_obj.item()
+                    self.performance['test'][i_epoch] = loss_current_epoch_test
+
+            # If measuring test performance for early stopping
+            if self.early_stopping:
+                loss_current_epoch = loss_current_epoch_test
+            else:
+                loss_current_epoch = loss_current_epoch_train
+
+            # Stop early if change in loss is slowing down or worsening (to prevent overfitting)
+            if loss_current_epoch - loss_minimum < self.tolerance:
+                best_epoch = i_epoch
+                state_dict = self.ann.state_dict()
+                loss_minimum = loss_current_epoch
+                n_epochs_without_improvement = 0
+            else:
+                n_epochs_without_improvement += 1
+
+            #
+            if self.early_stopping and (n_epochs_without_improvement > self.patience):
+                break
+
+        # Load the best model
+        self.ann.load_state_dict(state_dict)
+        self.best_epoch = best_epoch
+
+        return self
+    
+    def predict(self, X):
+        """
+        """
+
+        y_predicted = np.array(self.ann(torch.tensor(X, dtype=torch.float32).to(self.device)).cpu().detach())
+
+        return y_predicted
