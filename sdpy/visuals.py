@@ -1,8 +1,8 @@
 from .data import load_mlati
 from .mlp import PyTorchMLPRegressor, PyTorchMLPClassifier
 from sklearn.neural_network import MLPRegressor, MLPClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import confusion_matrix, root_mean_squared_error, r2_score, make_scorer
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy.ndimage import gaussian_filter
@@ -76,7 +76,7 @@ def visualize_Xyz(
     vmin, vmax = y_vrange
     for i, (c, l) in enumerate(zip([1, 2, 0], [0, 1, 2])):
         axs[i, 1].pcolor(
-            gaussian_filter(y[z == l] / _load_mlati_kwargs['y_binsize'], y_sigma),
+            gaussian_filter(y[z == l], y_sigma),
             cmap=cmap,
             vmin=vmin,
             vmax=vmax
@@ -178,7 +178,8 @@ def visualize_mlp_regressor_performance(
     data,
     cmap='Blues',
     vrange=(-1500, 1500),
-    figsize=(7.5, 3)
+    subplot_height_ratio=80,
+    figsize=(7.5, 4)
     ):
     """
     """
@@ -193,33 +194,36 @@ def visualize_mlp_regressor_performance(
         X, y, z,
         test_size=0.2
     )
-    y_train = y_train / 0.002
-    y_test = y_test / 0.002
 
     #
-    reg_pt = PyTorchMLPRegressor()
+    reg_pt = PyTorchMLPRegressor(max_epochs=100)
     reg_pt.fit(X_train, y_train)
     y_predicted_pt = reg_pt.predict(X_test)
-    reg_sk = MLPRegressor(solver='adam', max_iter=1000)
+    reg_sk = MLPRegressor(solver='adam', max_iter=100)
     reg_sk.fit(X_train, y_train)
     y_predicted_sk = reg_sk.predict(X_test)
 
     #
     height_ratios = [
+        subplot_height_ratio,
         np.sum(z_test == 0),
+        subplot_height_ratio,
         np.sum(z_test == 1),
+        subplot_height_ratio,
         np.sum(z_test == 2)
     ]
     fig, axs = plt.subplots(
-        nrows=3,
+        nrows=6,
         ncols=5,
         sharex=True,
         gridspec_kw={'height_ratios': height_ratios}
     )
-    for i, l in enumerate([0, 1, 2]):
+    cmap_fn = plt.get_cmap(cmap, 3)
+    for i, l in zip([1, 3, 5], [0, 1, 2]):
         residuals_sk = y_test[z_test == l] - y_predicted_sk[z_test == l]
         residuals_pt = y_test[z_test == l] - y_predicted_pt[z_test == l]
-        index = np.argsort(np.abs(residuals_pt).sum(1))
+        # index = np.argsort(np.abs(residuals_pt).sum(1))
+        index = np.arange(residuals_pt.shape[0])
         axs[i, 0].pcolor(y_test[z_test == l][index], vmin=vrange[0], vmax=vrange[1], cmap=cmap)
         axs[i, 1].pcolor(y_predicted_sk[z_test == l][index], vmin=vrange[0], vmax=vrange[1], cmap=cmap)
         axs[i, 2].pcolor(y_predicted_pt[z_test == l][index], vmin=vrange[0], vmax=vrange[1], cmap=cmap)
@@ -235,16 +239,32 @@ def visualize_mlp_regressor_performance(
             vmax=vrange[1],
             cmap=cmap
         )
+        axs[i - 1, 0].plot(y_test[z_test == l].mean(0), color=cmap_fn(2))
+        axs[i - 1, 1].plot(y_predicted_sk[z_test == l].mean(0), color=cmap_fn(2))
+        axs[i - 1, 2].plot(y_predicted_pt[z_test == l].mean(0), color=cmap_fn(2))
+        axs[i - 1, 3].plot(residuals_sk.mean(0), color=cmap_fn(2))
+        axs[i - 1, 4].plot(residuals_pt.mean(0), color=cmap_fn(2))
     
     #
     for ax in axs.flatten():
         ax.set_xticks([])
         ax.set_yticks([])
-    axs[0, 0].set_ylabel('0', rotation=0, labelpad=15)
-    axs[1, 0].set_ylabel('1', rotation=0, labelpad=15)
-    axs[2, 0].set_ylabel('2', rotation=0, labelpad=15)
+    for ax in axs[::2].flatten():
+        ax.set_ylim([-1000, 2000])
+        for sp in ('top', 'right', 'bottom', 'left'):
+            ax.spines[sp].set_visible(False)
+    axs[1, 0].set_ylabel('0', rotation=0, labelpad=15)
+    axs[3, 0].set_ylabel('1', rotation=0, labelpad=15)
+    axs[5, 0].set_ylabel('2', rotation=0, labelpad=15)
     fig.supylabel('Label', fontsize=10)
-    for j, t in enumerate([r'$y_{\text{test}}$', r'$y_{\text{pred (scikit-learn)}}$', r'$y_{\text{pred (PyTorch)}}$', r'Res. (scikit-learn)', r'Res. (PyTorch)}']):
+    titles = (
+        r'$y_{\text{test}}$',
+        r'$y_{pred}\text{ }\text{(scikit-learn)}$',
+        r'$y_{pred}\text{ }\text{(PyTorch)}$',
+        r'$\text{Res. (scikit-learn)}$',
+        r'$\text{Res. (PyTorch)}$'
+    )
+    for j, t in enumerate(titles):
         axs[0, j].set_title(t, fontsize=10)
     fig.set_figwidth(figsize[0])
     fig.set_figheight(figsize[1])

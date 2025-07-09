@@ -169,7 +169,8 @@ def load_mlati(
             t_raw,
             v_raw
         )
-        y.append(wf)
+        wf_scaled =  wf / y_binsize
+        y.append(wf_scaled)
     y = np.array(y)
 
     # Exclude units without event-related activity

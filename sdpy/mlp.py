@@ -3,7 +3,9 @@ import numpy as np
 from torch import nn
 from torch import optim
 from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
-from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
+from sklearn.metrics import make_scorer
+from sklearn.model_selection import TimeSeriesSplit, GridSearchCV, cross_validate
+from sklearn.neural_network import MLPRegressor
     
 class _MultiLayerPerceptron(nn.Module):
     """
@@ -307,3 +309,35 @@ class PyTorchMLPRegressor(BaseEstimator, RegressorMixin, _BasePyTorchModel):
         y_predicted = np.array(self.ann(torch.tensor(X, dtype=torch.float32).to(self.device)).cpu().detach())
 
         return y_predicted
+    
+def measure_regressor_performance(X, y):
+    """
+    Benchmark the PyTorch MLP regressor with R2 and RMSE using scikit-learn's MLPRegressor class as a comparison
+    """
+
+    reg_pt = PyTorchMLPRegressor()
+    reg_sk = MLPRegressor(solver='adam', max_iter=1000)
+    r2_scorer = make_scorer(
+        lambda y_t, y_p: 1 - (np.sum(np.power(y_t.ravel() - y_p.ravel(), 2)) / np.sum(np.power(y_t.ravel() - y_t.ravel().mean(), 2)))
+    )
+    rmse_scorer = make_scorer(
+        lambda y_t, y_p: np.sqrt(np.mean(np.power(y_t.flatten() - y_p.ravel(), 2))) 
+    )
+    scoring = {
+        'r2': r2_scorer,
+        'rmse': rmse_scorer
+    }
+    scores = {
+        'sk': None,
+        'pt': None
+    }
+    for k, reg in zip(scores.keys(), [reg_sk, reg_pt]):
+        scores[k] = cross_validate(
+            reg,
+            X,
+            y,
+            scoring=scoring,
+            cv=5
+        )
+
+    return scores
