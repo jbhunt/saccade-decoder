@@ -263,3 +263,112 @@ def load_mlati(
     z = np.delete(z, mask)
 
     return X, y, z
+
+def load_mlati_continuous(
+    filename,
+    trange=(0, 120),
+    Xy_binsize=0.01,
+    p_max=1e-3,
+    fr_min=1,
+    standardize_firing_rate=True,
+    resample_spike_timestamps=False,
+    random_seed=42
+    ):
+    """
+    """
+
+    #
+    np.random.seed(random_seed)
+
+    #
+    trange_rounded = (
+        np.floor(trange[0]),
+        np.ceil(trange[1])
+    )
+
+    # Load all the required datasets from the h5 file
+    with h5py.File(filename, 'r') as stream:
+        eye_position = np.array(stream['pose/filtered'])[:, 0]
+        n_frames_recorded = len(eye_position)
+        frame_timestamps = np.array(stream['frames/left/timestamps'])[:n_frames_recorded]
+        spike_timestamps = np.array(stream[f'spikes/timestamps'])
+        spike_clusters = np.array(stream[f'spikes/clusters'])
+        p_values = np.vstack([
+            np.array(stream['zeta/saccade/nasal/p']),
+            np.array(stream['zeta/saccade/temporal/p'])
+        ]).min(0)
+
+    # For some experiments there are different numbers of frames and timestamps which will preclude further processing
+    if frame_timestamps.size != eye_position.size:
+        raise Exception(f'Different number of frames ({eye_position.size}) and frame timestamps ({frame_timestamps.size})')
+    
+    # Resample spike timestamps using a uniform distribution (optional)
+    if resample_spike_timestamps == True:
+        spike_timestamps = np.around(np.random.uniform(
+            low=spike_timestamps.min(),
+            high=spike_timestamps.max(),
+            size=spike_timestamps.size
+        ), 3).astype(spike_timestamps.dtype)
+
+    # Create the eye position time series
+    t_raw = frame_timestamps[:-1] + (np.diff(frame_timestamps) / 2)
+    v_raw = np.diff(eye_position)
+    v_raw[np.isnan(v_raw)] = np.interp(t_raw[np.isnan(v_raw)], t_raw, v_raw) # Impute with interpolation
+    y = np.interp(
+        np.arange(*trange_rounded, Xy_binsize) + (Xy_binsize / 2),
+        t_raw,
+        v_raw
+    )
+    y[np.isnan(y)] = np.nanmedian(y)
+    y = y / Xy_binsize
+
+    # Exclude units without event-related activity
+    unique_clusters = np.unique(spike_clusters)
+    if p_max is None:
+        target_clusters = unique_clusters
+    else:
+        cluster_indices = np.arange(len(unique_clusters))[p_values <= p_max]
+        target_clusters = unique_clusters[cluster_indices] 
+
+    # Exclude units with too low of a firing rate
+    X = list()
+    for i_unit, target_cluster in enumerate(target_clusters):
+
+        #
+        spike_indices = np.where(spike_clusters == target_cluster)[0]
+
+        # Compute whole-recording parameters
+        t1, t2 = _estimate_recording_epoch(
+            spike_timestamps,
+            spike_clusters,
+            target_cluster,
+            pad=5   
+        )
+        n_bins = int((t2 - t1) / Xy_binsize)
+        n_spikes, bin_edges_ = np.histogram(
+            spike_timestamps[spike_indices],
+            range=(t1, t2),
+            bins=n_bins
+        )
+        fr = n_spikes / Xy_binsize
+        fr_mean = fr.mean()
+        if fr_mean < fr_min:
+            continue
+        fr_std = fr.std()
+
+        # Compute firing rate within target window
+        n_bins = int((trange_rounded[1] - trange_rounded[0]) / Xy_binsize)
+        n_spikes, bin_edges_ = np.histogram(
+            spike_timestamps[spike_indices],
+            range=trange_rounded,
+            bins=n_bins
+        )
+        fr = n_spikes / Xy_binsize
+        fr_scaled = (fr - fr_mean) / fr_std
+        if standardize_firing_rate:
+            X.append(fr_scaled)
+        else:
+            X.append(fr)
+    X = np.array(X).T
+
+    return X, y

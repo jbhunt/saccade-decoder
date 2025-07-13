@@ -4,8 +4,9 @@ from torch import nn
 from torch import optim
 from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
 from sklearn.metrics import make_scorer
-from sklearn.model_selection import TimeSeriesSplit, GridSearchCV, cross_validate
+from sklearn.model_selection import cross_validate
 from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import MinMaxScaler
     
 class _MultiLayerPerceptron(nn.Module):
     """
@@ -310,7 +311,7 @@ class PyTorchMLPRegressor(BaseEstimator, RegressorMixin, _BasePyTorchModel):
 
         return y_predicted
     
-def measure_regressor_performance(X, y):
+def measure_mlp_regressor_performance(X, y, normalize=False):
     """
     Benchmark the PyTorch MLP regressor with R2 and RMSE using scikit-learn's MLPRegressor class as a comparison
     """
@@ -331,6 +332,8 @@ def measure_regressor_performance(X, y):
         'sk': None,
         'pt': None
     }
+    if normalize:
+        X = MinMaxScaler().fit_transform(X)
     for k, reg in zip(scores.keys(), [reg_sk, reg_pt]):
         scores[k] = cross_validate(
             reg,
