@@ -3,6 +3,7 @@ from torch import nn, optim
 from torch.utils.data import Dataset, DataLoader
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.model_selection import cross_validate, TimeSeriesSplit
+from sklearn.metrics import r2_score
 import numpy as np
 from .data import load_mlati_continuous
 
@@ -10,7 +11,7 @@ def split_time_series(X, y, test_fraction=0.2):
     """
     """
 
-    i_split = int(round(X.shape[0] * test_fraction))
+    i_split = int(round(X.shape[0] * (1 - test_fraction)))
     X_train, X_test = X[:i_split], X[i_split:]
     y_train, y_test = y[:i_split], y[i_split:]
 
@@ -28,14 +29,14 @@ class SlidingWindowDataset(Dataset):
             raise Exception('Lag must be positive')
 
         if type(X) != torch.Tensor:
-            self.X = torch.tensor(X, dtype=torch.float)
+            self.X = torch.as_tensor(X, dtype=torch.float)
         else:
             self.X = X
         if y is None:
             self.y = y
         else:
             if type(y) != torch.Tensor:
-                self.y = torch.tensor(y, dtype=torch.float)
+                self.y = torch.as_tensor(y, dtype=torch.float)
             else:
                 self.y = y
         self.window_size = window_size
@@ -128,7 +129,7 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
         n_units=16,
         n_layers=1,
         lag=0,
-        batch_size=64,
+        batch_size=1024,
         max_iter=30,
         dropout=0.0,
         lr=1e-3,
@@ -136,7 +137,7 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
         patience=30,
         early_stopping=False,
         hold_out_fraction=0.1,
-        f_report=100,
+        f_report=10,
         device=None
         ):
         """
@@ -156,7 +157,10 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
         self.early_stopping = early_stopping
         self.hold_out_fraction = hold_out_fraction
         self.f_report = f_report
-        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+        if device is None:
+            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        else:
+            self.device = device
         self.best_epoch = None
 
         return
@@ -173,7 +177,10 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
             data_loader_test = DataLoader(
                 SlidingWindowDataset(X_test, y_test, self.n_steps, self.lag),
                 self.batch_size,
-                shuffle=False
+                shuffle=False,
+                num_workers=4,
+                pin_memory=True,
+                multiprocessing_context="spawn"
             )
         else:
             X_train, y_train = X, y
@@ -182,7 +189,10 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
         data_loader_train = DataLoader(
             SlidingWindowDataset(X_train, y_train, self.n_steps, self.lag),
             self.batch_size,
-            shuffle=True
+            shuffle=True,
+            num_workers=4,
+            pin_memory=True, 
+            multiprocessing_context="spawn"
         )
 
         #
@@ -201,6 +211,7 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
         loss_minimum = np.inf
         best_epoch = None
         n_epochs_without_improvement = 0
+        print(f'Training started using device: {next(self.model.parameters()).device}')
         for i_epoch in range(self.max_iter):
 
             # Training phase
@@ -209,8 +220,8 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
             n_samples = 0
             for X_batch, y_batch, y_indices in data_loader_train:
                 optimizer.zero_grad()
-                X_batch = X_batch.to(self.device)
-                y_batch = y_batch.to(self.device).view(-1, 1)
+                X_batch = X_batch.to(self.device, non_blocking=True)
+                y_batch = y_batch.to(self.device, non_blocking=True).view(-1, 1)
                 y_predicted = self.model(X_batch)
                 loss = loss_fn(y_predicted, y_batch)
                 loss.backward()
@@ -226,17 +237,18 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
                 with torch.no_grad():
                     n_samples = 0
                     for X_batch, y_batch, y_indices in data_loader_test:
-                        X_batch = X_batch.to(self.device)
-                        y_batch = y_batch.to(self.device).view(-1, 1)
+                        X_batch = X_batch.to(self.device, non_blocking=True)
+                        y_batch = y_batch.to(self.device, on_blocking=True).view(-1, 1)
                         y_predicted = self.model(X_batch)
                         loss = loss_fn(y_predicted, y_batch)
-                        loss_current_epoch_test += loss.item() * X.shape[0]
+                        loss_current_epoch_test += loss.item() * X_batch.shape[0]
                         n_samples += X_batch.shape[0]
                 loss_current_epoch_test /= n_samples
 
             #
             if (i_epoch == 0) or ((i_epoch + 1) % self.f_report == 0):
-                print(f'Epoch {i_epoch + 1}: training loss={loss_current_epoch_train:.5f}, test loss={loss_current_epoch_test:.5f}')
+                end = '\r' if i_epoch + 1 < self.max_iter else '\n'
+                print(f'Epoch {i_epoch + 1} complete: training loss={loss_current_epoch_train:.5f}, test loss={loss_current_epoch_test:.5f}', end=end)
             self.performance['train'][i_epoch] = loss_current_epoch_train
             self.performance['test'][i_epoch] = loss_current_epoch_test
 
@@ -258,6 +270,7 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
             else:
                 n_epochs_without_improvement += 1
             if self.early_stopping and (n_epochs_without_improvement > self.patience):
+                print(f'Stopping early at epoch {i_epoch + 1}: training loss={loss_current_epoch_train:.5f}, test loss={loss_current_epoch_test:.5f}', end='\n')
                 break
 
         #
@@ -266,7 +279,7 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
 
         return
     
-    def predict(self, X, return_indices=False):
+    def predict(self, X, pad=False, return_indices=False):
         """
         """
 
@@ -274,7 +287,10 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
         data_loader = DataLoader(
             SlidingWindowDataset(X, y=None, window_size=self.n_steps, lag=self.lag),
             batch_size=self.batch_size,
-            shuffle=False
+            shuffle=False,
+            num_workers=4,
+            pin_memory=True,
+            multiprocessing_context="spawn"
         )
         predictions = list()
         target_indices = list()
@@ -283,28 +299,49 @@ class PyTorchRNNRegressor(BaseEstimator, RegressorMixin):
                 X_batch = X_batch.to(self.device)
                 predictions.append(self.model(X_batch).cpu())
                 target_indices.append(i_batch)
+        y_pred = torch.cat(predictions).squeeze(1).numpy()
+        target_indices = torch.cat(target_indices).cpu().numpy().astype(int)
+        if pad:
+            y_pred = np.concatenate([np.full(self.n_steps + self.lag, np.nan), y_pred])
         if return_indices:
-            return torch.cat(predictions).squeeze(1).numpy(), torch.cat(target_indices).cpu().numpy().astype(int)
+            return y_pred, target_indices
         else:
-            return torch.cat(predictions).squeeze(1).numpy()
+            return y_pred
+        
+    def shorten_target_series(self, y):
+        """
+        Strip of the first N elements off of y where N is the width of the training sequence plus the forward time lag
+        """
+
+        return y[self.n_steps + self.lag:]
     
-    def score(self, X, y):
+    def compute_rmse(self, X, y):
         """
         Compute the root mean squared error
         """
 
-        offset = self.n_steps + self.lag
         y_pred = self.predict(X)
-        y_shortened = y[offset:]
-        rmse = np.sqrt(np.mean(np.power(y_shortened - y_pred, 2)))
+        y_short = self.shorten_target_series(y)
+        rmse = np.sqrt(np.mean(np.power(y_short - y_pred, 2)))
 
         return rmse
     
-    def shorten_target_series(self, y):
+    def compute_r2(self, X, y):
+        """
+        Compute the coefficient of determination
+        """
+
+        y_pred = self.predict(X)
+        y_short = self.shorten_target_series(y)
+        # r2 = 1 - (np.sum(np.power(y_short - y_pred, 2)) / np.sum(np.power(y_short - y_short.mean(), 2)))
+        r2 = r2_score(y_short, y_pred)
+        return r2
+    
+    def score(self, X, y):
         """
         """
 
-        return y[self.n_steps + self.lag:]
+        return self.compute_r2(X, y)
     
 def measure_rnn_regressor_performance(
     filename,

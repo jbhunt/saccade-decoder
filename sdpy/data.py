@@ -64,10 +64,10 @@ def _estimate_recording_epoch(
     """
 
     if target_cluster is None:
-        spike_indices = np.arange(spike_timestamps)
+        spike_indices = np.arange(spike_timestamps.size)
     else:
         spike_indices = np.where(spike_clusters == target_cluster)[0]
-    t1 = np.floor(spike_clusters[spike_indices].min()) + pad
+    t1 = np.floor(spike_timestamps[spike_indices].min()) + pad
     t2 = np.ceil(spike_timestamps[spike_indices].max()) - pad
     epoch = (t1, t2)
 
@@ -266,7 +266,7 @@ def load_mlati(
 
 def load_mlati_continuous(
     filename,
-    trange=(0, 120),
+    t_range=(0, 120),
     Xy_binsize=0.01,
     p_max=1e-3,
     fr_min=1,
@@ -280,12 +280,6 @@ def load_mlati_continuous(
     #
     np.random.seed(random_seed)
 
-    #
-    trange_rounded = (
-        np.floor(trange[0]),
-        np.ceil(trange[1])
-    )
-
     # Load all the required datasets from the h5 file
     with h5py.File(filename, 'r') as stream:
         eye_position = np.array(stream['pose/filtered'])[:, 0]
@@ -297,6 +291,15 @@ def load_mlati_continuous(
             np.array(stream['zeta/saccade/nasal/p']),
             np.array(stream['zeta/saccade/temporal/p'])
         ]).min(0)
+
+    #
+    if t_range is None:
+        t_range = _estimate_recording_epoch(spike_timestamps)
+    else:
+        t_range = (
+            np.floor(t_range[0]),
+            np.ceil(t_range[1])
+        )
 
     # For some experiments there are different numbers of frames and timestamps which will preclude further processing
     if frame_timestamps.size != eye_position.size:
@@ -315,7 +318,7 @@ def load_mlati_continuous(
     v_raw = np.diff(eye_position)
     v_raw[np.isnan(v_raw)] = np.interp(t_raw[np.isnan(v_raw)], t_raw, v_raw) # Impute with interpolation
     y = np.interp(
-        np.arange(*trange_rounded, Xy_binsize) + (Xy_binsize / 2),
+        np.arange(*t_range, Xy_binsize) + (Xy_binsize / 2),
         t_raw,
         v_raw
     )
@@ -357,10 +360,10 @@ def load_mlati_continuous(
         fr_std = fr.std()
 
         # Compute firing rate within target window
-        n_bins = int((trange_rounded[1] - trange_rounded[0]) / Xy_binsize)
+        n_bins = int((t_range[1] - t_range[0]) / Xy_binsize)
         n_spikes, bin_edges_ = np.histogram(
             spike_timestamps[spike_indices],
-            range=trange_rounded,
+            range=t_range,
             bins=n_bins
         )
         fr = n_spikes / Xy_binsize
