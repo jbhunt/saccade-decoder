@@ -1,4 +1,4 @@
-from .data import load_mlati
+from .data import load_mlati_discrete
 from .mlp import PyTorchMLPRegressor, PyTorchMLPClassifier
 from sklearn.neural_network import MLPRegressor, MLPClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
@@ -30,7 +30,7 @@ def visualize_Xyz(
     }
     _load_mlati_kwargs.update(load_mlati_kwargs)
     if xyz is None:
-        X, y, z = load_mlati(filename, **load_mlati_kwargs)
+        X, y, z = load_mlati_discrete(filename, **load_mlati_kwargs)
     else:
         X, y, z = xyz
 
@@ -125,7 +125,7 @@ def visualize_mlp_classifier_performance(
 
     #
     if type(data) == str:
-        X, y, z = load_mlati(data)
+        X, y, z = load_mlati_discrete(data)
     elif type(data) == tuple:
         X, y, z = data
 
@@ -186,7 +186,7 @@ def visualize_mlp_regressor_performance(
 
     #
     if type(data) == str:
-        X, y, z = load_mlati(data)
+        X, y, z = load_mlati_discrete(data)
     elif type(data) == tuple:
         X, y, z = data
 

@@ -1,87 +1,11 @@
 import torch
 from torch import nn, optim
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.model_selection import cross_validate, TimeSeriesSplit
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import r2_score
 import numpy as np
-from .data import load_mlati_continuous
-
-def split_time_series(X, y, test_fraction=0.2):
-    """
-    """
-
-    i_split = int(round(X.shape[0] * (1 - test_fraction)))
-    X_train, X_test = X[:i_split], X[i_split:]
-    y_train, y_test = y[:i_split], y[i_split:]
-
-    return X_train, X_test, y_train, y_test
-
-class SlidingWindowDataset(Dataset):
-    """
-    """
-
-    def __init__(self, X, y=None, window_size=1, lag=0):
-        """
-        """
-
-        if lag < 0:
-            raise Exception('Lag must be positive')
-
-        if type(X) != torch.Tensor:
-            self.X = torch.as_tensor(X, dtype=torch.float)
-        else:
-            self.X = X
-        if y is None:
-            self.y = y
-        else:
-            if type(y) != torch.Tensor:
-                self.y = torch.as_tensor(y, dtype=torch.float)
-            else:
-                self.y = y
-        self.window_size = window_size
-        self.lag = lag
-
-        return
-    
-    def __len__(self):
-        t_range = (self.window_size + self.lag) # Distance from start of sequence to prediction
-        return self.X.shape[0] - t_range
-    
-    def __getitem__(self, i):
-        """
-        """
-
-        if i >= len(self):
-            raise IndexError('Dataset index out of range')
-        
-        # Handle negative indices
-        n_steps = self.X.shape[0]
-        if i < 0:
-            i = n_steps + i
-
-        # Slice out X data
-        X_stop_index = i + self.window_size
-        X_start_index = i
-        X_slice = self.X[X_start_index: X_stop_index]
-
-        # Index y value
-        # y_index = X_stop_index + self.lag
-        y_index = X_stop_index + self.lag
-        if self.y is None:
-            y_value = torch.tensor(np.nan, dtype=torch.float)
-        else:
-            if y_index >= n_steps:
-                y_value = torch.tensor(np.nan, dtype=torch.float)
-            else:
-                y_value = self.y[y_index]
-        y_index = torch.tensor(y_index, dtype=torch.long)
-
-        return X_slice, y_value, y_index
-    
-    @property
-    def offset(self):
-        return self.window_size + self.lag
+from sdpy.data import load_mlati_continuous, SlidingWindowDataset
 
 class RecurrentNeuralNetwork(nn.Module):
     """

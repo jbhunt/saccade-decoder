@@ -13,7 +13,7 @@ class _MultiLayerPerceptron(nn.Module):
     Implmentation of an articial neural network (Multi-layer perceptron)
     """
 
-    def __init__(self, input_layer_size=1, output_layer_size=1, hidden_layer_sizes=[1,]):
+    def __init__(self, input_layer_size=1, output_layer_size=1, hidden_layer_sizes=[1,], dropout=None):
         """
         """
 
@@ -28,6 +28,8 @@ class _MultiLayerPerceptron(nn.Module):
                 s2 = hidden_layer_sizes[i_layer + 1]
                 layers.append(nn.Linear(s1, s2))
                 layers.append(nn.ReLU())
+                if dropout is not None:
+                    layers.append(nn.Dropout(p=dropout))
             else:
                 layers.append(nn.Linear(s1, output_layer_size))
         self.seq = nn.Sequential(*layers)
@@ -49,9 +51,11 @@ class _BasePyTorchModel():
         hidden_layer_sizes=[100,],
         lr=1e-3,
         alpha=1e-4,
-        max_epochs=1000,
+        max_iter=1000,
         tolerance=1e-4,
         patience=10,
+        dropout=None,
+        f_report=10,
         early_stopping=False,
         hold_out_fraction=0.1,
         device=None,
@@ -60,11 +64,13 @@ class _BasePyTorchModel():
         """
 
         self.hidden_layer_sizes = hidden_layer_sizes
-        self.max_epochs = max_epochs
+        self.max_iter = max_iter
         self.lr = lr
         self.alpha = alpha
         self.tolerance = tolerance
         self.patience = patience
+        self.dropout = dropout
+        self.f_report = f_report
         self.ann = None
         self.performance = None
         self.early_stopping = early_stopping
@@ -98,7 +104,8 @@ class PyTorchMLPClassifier(BaseEstimator, ClassifierMixin, _BasePyTorchModel):
         self.ann = _MultiLayerPerceptron(
             Xt.shape[1],
             output_layer_size,
-            self.hidden_layer_sizes
+            self.hidden_layer_sizes,
+            dropout=self.dropout
         ).to(self.device)
 
         # Declare train and test indices
@@ -122,8 +129,8 @@ class PyTorchMLPClassifier(BaseEstimator, ClassifierMixin, _BasePyTorchModel):
             weight_decay=self.alpha
         )
         self.performance = {
-            'train': np.full(self.max_epochs, np.nan),
-            'test': np.full(self.max_epochs, np.nan),
+            'train': np.full(self.max_iter, np.nan),
+            'test': np.full(self.max_iter, np.nan),
         }
         loss_minimum = np.inf
         loss_current_epoch_train = None
@@ -131,7 +138,7 @@ class PyTorchMLPClassifier(BaseEstimator, ClassifierMixin, _BasePyTorchModel):
         best_epoch = None
 
         # Main training loop
-        for i_epoch in range(self.max_epochs):
+        for i_epoch in range(self.max_iter):
 
             # Training step
             self.ann.train()
@@ -218,7 +225,8 @@ class PyTorchMLPRegressor(BaseEstimator, RegressorMixin, _BasePyTorchModel):
         self.ann = _MultiLayerPerceptron(
             Xt.shape[1],
             output_layer_size,
-            self.hidden_layer_sizes
+            self.hidden_layer_sizes,
+            dropout=self.dropout
         ).to(self.device)
 
         # Declare train and test indices
@@ -242,8 +250,8 @@ class PyTorchMLPRegressor(BaseEstimator, RegressorMixin, _BasePyTorchModel):
             weight_decay=self.alpha
         )
         self.performance = {
-            'train': np.full(self.max_epochs, np.nan),
-            'test': np.full(self.max_epochs, np.nan),
+            'train': np.full(self.max_iter, np.nan),
+            'test': np.full(self.max_iter, np.nan),
         }
         loss_minimum = np.inf
         loss_current_epoch_train = None
@@ -251,7 +259,8 @@ class PyTorchMLPRegressor(BaseEstimator, RegressorMixin, _BasePyTorchModel):
         best_epoch = None
 
         # Main training loop
-        for i_epoch in range(self.max_epochs):
+        print(f'Training started using device: {next(self.ann.parameters()).device}')
+        for i_epoch in range(self.max_iter):
 
             # Training step
             self.ann.train()
@@ -294,7 +303,13 @@ class PyTorchMLPRegressor(BaseEstimator, RegressorMixin, _BasePyTorchModel):
                 n_epochs_without_improvement += 1
 
             #
+            if (i_epoch == 0) or ((i_epoch + 1) % self.f_report == 0):
+                end = '\r' if i_epoch + 1 < self.max_iter else '\n'
+                print(f'Epoch {i_epoch + 1} complete: training loss={loss_current_epoch_train:.5f}, test loss={loss_current_epoch_test:.5f}', end=end)
+
+            #
             if self.early_stopping and (n_epochs_without_improvement > self.patience):
+                print(f'Stopping early at epoch {i_epoch + 1}: training loss={loss_current_epoch_train:.5f}, test loss={loss_current_epoch_test:.5f}', end='\n')
                 break
 
         # Load the best model

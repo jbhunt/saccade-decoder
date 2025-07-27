@@ -1,90 +1,24 @@
 import h5py
+import torch
+from torch.utils.data import Dataset
 import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import MinMaxScaler
 from decimal import Decimal
+from sdpy.utils import estimate_recording_epoch
 
-def psth(
-    reference_event,
-    relative_event,
-    window=(-1, 1),
-    binsize=0.05,
-    return_shape=False
-    ):
-    """
-    """
-
-    # Case of a single bin
-    if binsize is None:
-        nBins = 1
-        binEdges = window
-        t = window[0] + np.diff(window).item() / 2
-
-    # Check that the time window is evenly divisible by the binsize
-    else:
-        start, stop = np.around(window, 3)
-        residual = (Decimal(str(stop)) - Decimal(str(start))) % Decimal(str(binsize))
-        if residual != 0:
-            raise ValueError('Window must be evenly divisible by binsize')
-
-        # Compute the bin edges
-        window_length = float(Decimal(str(stop)) - Decimal(str(start)))
-        nBins = int(round(window_length / binsize))
-        bin_edges = np.linspace(start, stop, nBins + 1)
-        t = bin_edges[:-1] + binsize / 2
-
-    # Return early if all you need is the shape of the PSTH
-    if return_shape:
-        return t, reference_event.size, nBins
-
-    # Compute relative timestamps and histograms
-    M = np.full([reference_event.size, nBins], np.nan)
-    relative_timestamps = list()
-    for row_index, timestamp in enumerate(reference_event):
-        relative_timestamps_ = relative_event - timestamp
-        m = np.logical_and(
-            relative_timestamps_ >= window[0],
-            relative_timestamps_ <= window[1]
-        )
-        bin_counts, bin_edges_ = np.histogram(relative_timestamps_[m], bins=bin_edges)
-        M[row_index, :] = bin_counts
-        relative_timestamps.append(relative_timestamps_[m])
-
-    #
-    return t, M, relative_timestamps
-
-def _estimate_recording_epoch(
-    spike_timestamps,
-    spike_clusters=None,
-    target_cluster=None,
-    pad=1,
-    ):
-    """
-    Estimate the start and stop of global spiking given the spike timestamps for one or all units
-    """
-
-    if target_cluster is None:
-        spike_indices = np.arange(spike_timestamps.size)
-    else:
-        spike_indices = np.where(spike_clusters == target_cluster)[0]
-    t1 = np.floor(spike_timestamps[spike_indices].min()) + pad
-    t2 = np.ceil(spike_timestamps[spike_indices].max()) - pad
-    epoch = (t1, t2)
-
-    return epoch
-
-def load_mlati(
+def load_mlati_discrete(
     filename,
+    derivative=0,
     X_binsize=0.01,
     X_bincounts=(20, 20),
     y_binsize=0.002,
     y_bincounts=(25, 45),
     p_max=1e-3,
     fr_min=1,
-    standardize_firing_rate=True,
+    standardize_firing_rate=False,
     add_null_events=True,
     resample_spike_timestamps=False,
-    shuffle_labels=False,
     random_seed=42,
     ):
     """
@@ -151,14 +85,17 @@ def load_mlati(
     event_timestamps = event_timestamps[index]
     z = z[index]
 
-    # Shuffle saccade labels (optional)
-    if shuffle_labels:
-        np.random.shuffle(z)
-
     # Create the eye position time series
     t_raw = frame_timestamps[:-1] + (np.diff(frame_timestamps) / 2)
-    v_raw = np.diff(eye_position)
-    v_raw[np.isnan(v_raw)] = np.interp(t_raw[np.isnan(v_raw)], t_raw, v_raw) # Impute with interpolation
+    if derivative == 0:
+        t_raw = frame_timestamps
+        y_raw = eye_position
+    elif derivative == 1:
+        t_raw = frame_timestamps[:-1] + (np.diff(frame_timestamps) / 2)
+        y_raw = np.diff(eye_position) / y_binsize
+    else:
+        raise Exception(f'Derivatives > 1 not supported')
+    y_raw[np.isnan(y_raw)] = np.interp(t_raw[np.isnan(y_raw)], t_raw, y_raw) # Impute with interpolation
 
     # Collect the eye velocity waveforms for saccades 
     y = list()
@@ -167,7 +104,7 @@ def load_mlati(
         wf = np.interp(
             t_eval + event_timestamp,
             t_raw,
-            v_raw
+            y_raw
         )
         wf_scaled =  wf / y_binsize
         y.append(wf_scaled)
@@ -185,7 +122,7 @@ def load_mlati(
     if fr_min is not None:
         unit_indices = list()
         for i_unit, target_cluster in enumerate(target_clusters):
-            t1, t2 = _estimate_recording_epoch(
+            t1, t2 = estimate_recording_epoch(
                 spike_timestamps,
                 spike_clusters,
                 target_cluster,
@@ -264,13 +201,15 @@ def load_mlati(
 
     return X, y, z
 
+
 def load_mlati_continuous(
     filename,
-    t_range=(0, 120),
-    Xy_binsize=0.01,
+    derivative=0,
+    t_range=None,
+    xy_binsize=0.01,
     p_max=1e-3,
     fr_min=1,
-    standardize_firing_rate=True,
+    standardize_firing_rate=False,
     resample_spike_timestamps=False,
     random_seed=42
     ):
@@ -294,7 +233,7 @@ def load_mlati_continuous(
 
     #
     if t_range is None:
-        t_range = _estimate_recording_epoch(spike_timestamps)
+        t_range = estimate_recording_epoch(spike_timestamps)
     else:
         t_range = (
             np.floor(t_range[0]),
@@ -314,16 +253,21 @@ def load_mlati_continuous(
         ), 3).astype(spike_timestamps.dtype)
 
     # Create the eye position time series
-    t_raw = frame_timestamps[:-1] + (np.diff(frame_timestamps) / 2)
-    v_raw = np.diff(eye_position)
-    v_raw[np.isnan(v_raw)] = np.interp(t_raw[np.isnan(v_raw)], t_raw, v_raw) # Impute with interpolation
+    if derivative == 0:
+        t_raw = frame_timestamps
+        y_raw = eye_position
+    elif derivative == 1:
+        t_raw = frame_timestamps[:-1] + (np.diff(frame_timestamps) / 2)
+        y_raw = np.diff(eye_position) / xy_binsize
+    else:
+        raise Exception(f'Derivatives > 1 not supported')
+    y_raw[np.isnan(y_raw)] = np.interp(t_raw[np.isnan(y_raw)], t_raw, y_raw) # Impute with interpolation
     y = np.interp(
-        np.arange(*t_range, Xy_binsize) + (Xy_binsize / 2),
+        np.arange(*t_range, xy_binsize) + (xy_binsize / 2),
         t_raw,
-        v_raw
+        y_raw
     )
     y[np.isnan(y)] = np.nanmedian(y)
-    y = y / Xy_binsize
 
     # Exclude units without event-related activity
     unique_clusters = np.unique(spike_clusters)
@@ -341,32 +285,32 @@ def load_mlati_continuous(
         spike_indices = np.where(spike_clusters == target_cluster)[0]
 
         # Compute whole-recording parameters
-        t1, t2 = _estimate_recording_epoch(
+        t1, t2 = estimate_recording_epoch(
             spike_timestamps,
             spike_clusters,
             target_cluster,
             pad=5   
         )
-        n_bins = int((t2 - t1) / Xy_binsize)
+        n_bins = int((t2 - t1) / xy_binsize)
         n_spikes, bin_edges_ = np.histogram(
             spike_timestamps[spike_indices],
             range=(t1, t2),
             bins=n_bins
         )
-        fr = n_spikes / Xy_binsize
+        fr = n_spikes / xy_binsize
         fr_mean = fr.mean()
         if fr_mean < fr_min:
             continue
         fr_std = fr.std()
 
         # Compute firing rate within target window
-        n_bins = int((t_range[1] - t_range[0]) / Xy_binsize)
+        n_bins = int((t_range[1] - t_range[0]) / xy_binsize)
         n_spikes, bin_edges_ = np.histogram(
             spike_timestamps[spike_indices],
             range=t_range,
             bins=n_bins
         )
-        fr = n_spikes / Xy_binsize
+        fr = n_spikes / xy_binsize
         fr_scaled = (fr - fr_mean) / fr_std
         if standardize_firing_rate:
             X.append(fr_scaled)
@@ -374,4 +318,118 @@ def load_mlati_continuous(
             X.append(fr)
     X = np.array(X).T
 
-    return X, y
+    return X, y.reshape(-1, 1)
+
+class SlidingWindowDataset(Dataset):
+    """
+    Dataset that returns (X_window, y_value, y_index) tuples for
+    time-series learning, supporting both positive and negative lags.
+    """
+
+    def __init__(self, X, y=None, window_size=1, lag=0):
+        self.X = torch.as_tensor(X, dtype=torch.float) if not isinstance(X, torch.Tensor) else X
+        self.y = torch.as_tensor(y, dtype=torch.float) if y is not None and not isinstance(y, torch.Tensor) else y
+        self.window_size = window_size
+        self.lag = lag
+        if self.lag < 0:
+            if abs(self.lag) > self.window_size:
+                self.element_length = abs(self.lag)
+            else:
+                self.element_length = self.window_size
+        else:
+            self.element_length = self.window_size + self.lag + 1
+        if self.element_length > self.X.shape[0]:
+            raise Exception('Not enough samples to create window')
+        return
+
+    def __len__(self):
+        return self.X.shape[0] - self.element_length + 1
+
+    def __getitem__(self, i):
+        if i >= len(self):
+            raise IndexError("Dataset index out of range")
+        if i < 0:
+            raise Exception('Negative indexing not supported')
+        X_start = i
+        X_end = i + self.window_size
+        X_slice = self.X[X_start:X_end]
+        y_index = X_end + self.lag
+        y_value = self.y[y_index]
+        return X_slice, y_value, torch.tensor(y_index, dtype=torch.long)
+
+    @property
+    def offset(self):
+        return self.window_size + self.lag
+    
+def load_mlati_windowed(
+    filename,
+    **kwargs_,
+    ):
+    """
+    """
+
+    kwargs = {
+        'xy_binsize': 0.01,
+        't_range': None,
+        'derivative': 0,
+        'window_size': 1,
+        'lag': 0
+    }
+    kwargs.update(kwargs_)
+
+    X_series, y_series = load_mlati_continuous(
+        filename,
+        xy_binsize=kwargs['xy_binsize'],
+        t_range=kwargs['t_range'],
+        derivative=kwargs['derivative']
+    )
+    ds = SlidingWindowDataset(X_series, y_series,
+        window_size=kwargs['window_size'],
+        lag=kwargs['lag']
+    )
+    X, y = list(), list()
+    for X_seq, y_seq, y_index in ds:
+        X.append(X_seq.flatten())
+        y.append(y_seq)
+    X, y = map(np.array, [X, y])
+
+    return X, y.reshape(-1, 1)
+
+class Mlati():
+    """
+    """
+
+    def __init__(
+        self,
+        filename,
+        form='D',
+        **kwargs,
+        ):
+        """
+        """
+
+        #
+        if form in ['discrete', 'd', 'D', 1]:
+            self._X, self._y, self._z = load_mlati_discrete(filename, **kwargs)
+        elif form in ['continuous', 'c', 'C', 2]:
+            self._X, self._y = load_mlati_continuous(filename, **kwargs)
+            self._z = None
+        elif form in ['windowed', 'w', 'W', 3]:
+            self._X, self._y = load_mlati_windowed(filename, **kwargs)
+            self._z = None
+        else:
+            raise Exception(f'{format} is not a valid form')
+
+        return
+
+    @property
+    def X(self):
+        return self._X
+    
+    @property
+    def y(self):
+        return self._y
+    
+    @property
+    def z(self):
+        return self._z

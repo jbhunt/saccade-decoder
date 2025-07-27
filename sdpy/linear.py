@@ -87,9 +87,3 @@ class RidgeRegression():
         """
 
         return X @ self.betas[1:] + self.betas[0]
-    
-def train(X, y, **kwargs):
-    """
-    """
-
-    return
