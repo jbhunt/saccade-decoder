@@ -60,25 +60,27 @@ The regressors are good, but not great at decoding eye velocity from neural acti
 
 
 # 4. Decoding continuous eye velocity
-Next, I wanted to try my hand at real-time neural decoding with deep learning à la brain-computer interfaces. First, to get a sense of the optimal lag between neurla activity and velocity, I analyzed the cross-validated performance of an MLP regressor trained on neural activity to predict continuous eye velocity.
+Next, I wanted to try my hand at real-time neural decoding with deep learning à la brain-computer interfaces. First, to get a sense of the optimal lag between neural activity and velocity, I analyzed the cross-validated performance of an MLP regressor trained on neural activity to predict continuous eye velocity.
 
-The training data (`X`) consists of binned spike counts from a sliding time window run across the entire recording. For each forward shift of the sliding window, I collected eye velocity from a time point at a constant lag from the end of the window; these data became the target variable (`y`). The `sdpy.data.Mlati` class implements this windowing.
+The training data (`X`) consists of binned spike counts from a sliding time window run across the entire recording. For each forward shift of the sliding window, I collected eye velocity from a time point at a constant lag from the end of the window; these data became the target variable (`y`). The `sdpy.data.Mlati` class implements this sliding time window.
 ```Python
 from sdpy import data
 mlati = data.Mlati(<path to h5 file>, form='W') # W for windowed
 ```
 
-I trained the MLP to predict the continuous eye velocity signal (`y`) based on the binned spike counts (`X`). The figure below shows true eye velocity (top row), decoded eye velocity (middle row), and residual eye velocity (bottom row) for an example recording in which the decoder performed well.
+The figure below shows true eye velocity (top row), decoded eye velocity (middle row), and residual eye velocity (bottom row) for a test dataset (last fifth of the recording) from an example recording in which the decoder performed well.
 
 <p align="center">
   <img src="docs/imgs/continuous_decoding_example.png" width="700" alt="Animated demo">
 </p>
 
-Here is a zoomed in view of the eye velocity signals during several saccadic eye movements.
+Here is a zoomed in view of the eye velocity signals during several saccadic eye movements. Dark blue is the true eye velocity and light blue is the decoded eye velocity.
 
 <p align="center">
   <img src="docs/imgs/continuous_decoding_example_zoom.png" width="700" alt="Animated demo">
 </p>
+
+For this example recording, the decoder does pretty well using neural activity to predict continuous eye velocity; however, it seems to still be underestimating the amplitude of high velocity events like saccadic eye movements. This is similar to what I observed in section 3.
 
  I repeated this model training for a range of time lags spanning -1 to +1 s relative to the end of the sliding time window. The figure below shows 47 curves (light blue) representing the coefficient of determination (measured on a test dataset) as a function of time lag for each of the 47 recordings in the Mlati dataset. The dark blue curve shows the mean across recordings, the dark blue horizontal line indicates the width of the sliding window, and the dashed vertical line indicates the end of the sliding window.
 
