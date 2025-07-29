@@ -54,6 +54,7 @@ class DecodingAnalysis():
         skip_to_index=None
         ):
         """
+        
         """
 
         r2_scores = np.full([len(self.files), len(lags)], np.nan)
@@ -79,6 +80,6 @@ class DecodingAnalysis():
             except:
                 print(f'Exception for file: {file}')
                 continue
-            np.save(f'/home/josh/Desktop/decoding_curves/curve_{i_file}.npy', r2_scores[i_file, :])
+            np.save(f'/home/josh/Desktop/decoding_curves_2/curve_{i_file}.npy', r2_scores[i_file, :])
 
         return r2_scores

@@ -1,8 +1,8 @@
 # Introduction
 This is a repository that showcases a set of neural decoders implemented with PyTorch. The models are being used to decode eye movement kinematics (velocity) using neural data (single-unit spiking).
 
-# Data
-## Interfacing with the Mlati dataset
+
+# 1. Interfacing with the Mlati dataset
 For these analyses I'm using a dataset I collected during my PhD which can be downloaded [here](https://datadryad.org/dataset/doi:10.5061/dryad.cnp5hqcfn). Briefly, the data for each experiment in this dataset is stored in an h5 file with the filenameing convention "\<date>_\<animal>_store.hdf." I created the `sdpy.data` module to interface with the Mlati dataset using these h5 files. Here is an example that demonstrates how to load the neural activity and eye velocity signals for a single experiment.
 ```Python
 from sdpy import data
@@ -19,10 +19,8 @@ Here is a plot that visualizes the first 500 columns of `X` (i.e, the first 25 n
   <img src="docs/imgs/Xyz.png" width="700" alt="Animated demo">
 </p>
 
-# Modeling
-Below are some examples showcasing various implementations of machine learning models and techniques applied to this dataset.
 
-## Predicting saccade type with a multi-layer perceptron
+# 2. Predicting the "type" of saccade
 I wanted to see if I could use peri-saccadic single-unit spiking to predict 1.) if the animal made a saccade and 2.) the direction of each saccade that was made. To do this, I implemented an Multi-layer perceptron (MLP) classifier with PyTorch. You can find the implementation [here](https://github.com/jbhunt/saccade-decoder/blob/7556287ea31d8e364d5fe4fc0428b654b108bed8/sdpy/mlp.py#L197). My implementationd - `sdpy.mpl.PyTorchMLPClassifier` - emulates the design and interface used by scikit-learn. For example, this class has both a `fit` and `predict` method.
 ```Python
 from sdpy import mlp, data
@@ -50,7 +48,8 @@ On my machine, the Scikit-learn implementation is ~75% accuracte and my implemen
 
 Both models do pretty well decoding the type of saccade using neural activity with sklearn's MLP struggling a little bit more to predict null events (z=0).
 
-## Decoding peri-saccadic eye velocity with a multi-layer perceptron
+
+# 3. Decoding peri-saccadic eye velocity
 Next, I wanted to see if I could decode eye velocity using single-unit spiking. Unlike saccade type which is a categorical variable, eye velocity is a continuous time-series, so the type of problem changes from classification to regression. To decode eye velocity, I implemented an MLP-based regressor using PyTorch and compared its performance to scikit-learn's `sklearn.neural_network.MLPRegressor` class. From left to right, the columns in the figure below show the test eye velocity waveforms, the predicted eye velocity waveforms using scikit-learn's regressor, the predicted eye velocity waveforms using my regressor, the residuals from scikit-learn's predictions, and the residuals from my regressor's predictions. I've grouped the samples by the type of saccade for visualization. The solid lines on top of each subplot show the average eye velocity for that subset of samples.
 
 <p align="center">
@@ -59,24 +58,45 @@ Next, I wanted to see if I could decode eye velocity using single-unit spiking. 
 
 The regressors are good, but not great at decoding eye velocity from neural activity: scikit-learn's regressor produces a RMSE of 270 deg/s and an $R^2$ of 0.58; my regressor produces a RMSE of 272.7 deg/s and an $R^2$ of 0.57. It seems like the regressors are predicting the correct sign (i.e., positive or negative peaks in velocity), but understimating the amplitude of the eye velocity waveforms. Decoding eye velocity appears to be a more difficult problem than decoding the type of saccade.
 
-## Predicting continuous eye velocity
-Next, I wanted to try my hand at real-time neural decoding with deep learning à la brain-computer interfaces.
 
-### Using a feedforward neural network
-First, to identify the optimal window of time to use for predicting eye velocity, I analyzed the cross-validated performance of an MLP regressor trained on neural activity to predict continuous eye velocity. The training data (`X`) consisted of binned spike counts from a sliding time window run across the entire recording. For each forward shift of the sliding window, I collected eye velocity from a time point at a constant lag from the end of the window; these data became the target variable (`y`). I then trained the MLP to predict the continuous eye velocity signal (`y`) based on the binned spike counts (`X`) using early stopping to prevent overfitting, and repeated this procedure for a range of lags (-1 to +1 s relative to the end of the time window). The figure below shows 47 curves (light blue) representing the coefficient of determination (measured on a test dataset) as a function of time lag for each of the 47 recordings in this dataset. The dark blue curve shows the mean across recordings, the dark blue horizontal line indicates the width of the sliding time window, and the dashed vertical line indicates the end of the sliding window.
+# 4. Decoding continuous eye velocity
+Next, I wanted to try my hand at real-time neural decoding with deep learning à la brain-computer interfaces. First, to get a sense of the optimal lag between neurla activity and velocity, I analyzed the cross-validated performance of an MLP regressor trained on neural activity to predict continuous eye velocity.
+
+The training data (`X`) consists of binned spike counts from a sliding time window run across the entire recording. For each forward shift of the sliding window, I collected eye velocity from a time point at a constant lag from the end of the window; these data became the target variable (`y`). The `sdpy.data.Mlati` class implements this windowing.
+```Python
+from sdpy import data
+mlati = data.Mlati(<path to h5 file>, form='W') # W for windowed
+```
+
+I trained the MLP to predict the continuous eye velocity signal (`y`) based on the binned spike counts (`X`). The figure below shows true eye velocity (top row), decoded eye velocity (middle row), and residual eye velocity (bottom row) for an example recording in which the decoder performed well.
+
+<p align="center">
+  <img src="docs/imgs/continuous_decoding_example.png" width="700" alt="Animated demo">
+</p>
+
+Here is a zoomed in view of the eye velocity signals during several saccadic eye movements.
+
+<p align="center">
+  <img src="docs/imgs/continuous_decoding_example_zoom.png" width="700" alt="Animated demo">
+</p>
+
+ I repeated this model training for a range of time lags spanning -1 to +1 s relative to the end of the sliding time window. The figure below shows 47 curves (light blue) representing the coefficient of determination (measured on a test dataset) as a function of time lag for each of the 47 recordings in the Mlati dataset. The dark blue curve shows the mean across recordings, the dark blue horizontal line indicates the width of the sliding window, and the dashed vertical line indicates the end of the sliding window.
+
 <p align="center">
   <img src="docs/imgs/r2_over_time.png" width="700" alt="Animated demo">
 </p>
-Interestingly, neural activity is highly informative of eye velocity 0 to ~350 ms in the past. This makes sense given that I targeted my recordings to a visual brain structure. Generally, the animals moving their eyes elicits visual responses in the neurons I recorded from, so these responses are useful for decoding past eye movement. I was kind of surprised to see almost no predictive ability for future eye velocity; all the curves rectify around 0 s. I would have expected that the neural activity would be useful for predicting near-future eye velocity, but that doesn't seem the case. In the future, I'd like to see if including only neurons with premotor activity has any effect on the ability of this model to predict near-future eye velocity.
 
-### Using a recurrent neural network
-Finally, I implemented a many-to-one long short-term memory (LSTM) model that predicts future eye velocity given a sequence of neural activity from a lagged time window. LSTM models are the de facto standard for real-time neural decoding given that they explicitly model temporal structure. To use the LSTM regressor, you need to reshape the data into a continous time series. To do this, you can use the `sdpy.data.Mlati` class and the `form` keyword argument.
+Interestingly, neural activity is highly informative of eye velocity 0 to ~350 ms in the past. This makes sense given that I targeted my recordings to a visual brain structure. TEye movements elicit visual responses in the neurons I recorded from, so these responses are useful for decoding past eye movement. 
+
+I was kind of surprised to see almost no ability to predict future eye velocity; all the curves rectify around 0 s. I assumed I would have picked up some neurons with premotor activity, so I expected that the total neural activity would be useful for predicting near-future eye velocity, but that doesn't seem the case. In the future, I'd like to see if including only neurons with premotor activity (i.e., excluding purely visual neurons) has any effect on the ability of this model to predict near-future eye velocity.
+
+# 5. Neural decoding with an RNN
+Finally, I implemented a many-to-one long short-term memory (LSTM) model that predicts future eye velocity given a sequence of neural activity from a lagged time window. LSTM models are the de facto standard for real-time neural decoding because they explicitly model temporal structure. To use the LSTM regressor, you need to reshape the data into a continous time series. To do this, you can use the `sdpy.data.Mlati` class and the `form` keyword argument.
 ```Python
 from sdpy import data
-mlati = data.Mlati(<path to h5 file>, form='C')
+mlati = data.Mlati(<path to h5 file>, form='C') # C for continuous
 ```
-
-My implementation of an LSTM model is located at `sdpy.rnn.PyTorchRNNRegressor`. As with the previous implementations, I emulated scikit-learn's interface such that the LSTM model has a `fit` and `predict` method.
+My implementation of an LSTM model can be found at `sdpy.rnn.PyTorchRNNRegressor`. As with the previous implementations, I emulated scikit-learn's interface giving the class `fit` and `predict` methods.
 ```Python
 from sdpy import rnn
 reg = rnn.PyTorchRNNRegressor()
@@ -84,11 +104,11 @@ X_train, X_test, y_train, y_split = rnn.split_time_series(mlati.X, mlati.y, test
 reg.fit(X_train, y_train)
 y_predicted = rnn.predict(X_test)
 ``` 
-The major hyperparameters that can be tuned are:
-- `n_steps` - The size of the sequence used for training (in bins)
+The hyperparameters that can be tuned are:
+- `n_steps` - The size of the input sequence (in bins)
 - `n_units` - The number of memory cells in each layer of the LSTM
 - `n_layers` - The number of layers in the LSTM
-I used scikit-learn's `GridSearchCV` class to search the parameter space for the optimal values
+I used scikit-learn's `GridSearchCV` class to search the parameter space for the optimal values of each hyperparameter.
 ```Python
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 param_grid = {
@@ -100,4 +120,4 @@ cv = TimeSeriesSplit(5)
 reg = rnn.PyTorchRNNRegressor(max_iter=500) # Lower the maximum number of training epochs to speed up the search
 gs = GridSearchCV(reg, param_grid, cv=cv)
 ```
-I'm still working on a detailed analysis of performance of the LSTM, but it seems like the RNN doesn't do a great job predicting future eye velocity which is similar to the result I got with the MLP.
+I'm still working on a detailed analysis of performance of the LSTM; it is a very computationally intensive process searching the hyperparameter space, but it seems like the RNN doesn't do a great job predicting future eye velocity. This is consistent with the result of using a feedforward model to predict continuous eye velocity. It seems like I was mostly recording from visual neurons whose activity isn't informative of intended eye movements.

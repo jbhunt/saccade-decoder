@@ -272,3 +272,112 @@ def visualize_mlp_regressor_performance(
     fig.subplots_adjust(hspace=0.1, wspace=0.1)
 
     return fig, axs
+
+from sdpy import data, utils
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.neural_network import MLPRegressor
+def visualize_continuous_prediction(
+    filename,
+    lag=-9,
+    window_size=10,
+    cmap='Blues',
+    figsize=(8, 3),
+    mlati=None,
+    reg=None
+    ):
+    """
+    """
+
+    if mlati is None:
+        mlati = data.Mlati(
+            filename,
+            form='W',
+            window_size=window_size,
+            lag=lag,
+            derivative=1,
+        )
+    X_scaled = MinMaxScaler().fit_transform(mlati.X)
+    scaler = StandardScaler()
+    scaler.fit(mlati.y)
+    y_scaled = scaler.transform(mlati.y)
+    X_train, X_test, y_train, y_test = utils.split_time_series(
+        X_scaled,
+        y_scaled,
+        test_fraction=0.2
+    )
+    if reg is None:
+        reg = MLPRegressor(
+            hidden_layer_sizes=[256, 128],
+            early_stopping=True,
+            verbose=True
+        )
+        reg.fit(X_train, y_train.ravel())
+    y_pred = reg.predict(X_test)
+    y_error = y_test.flatten() - y_pred.flatten()
+    fig, axs = plt.subplots(nrows=3)
+    f = plt.get_cmap(cmap, 5)
+    t = np.arange(y_test.size) * 0.01 / 60
+    axs[0].plot(t, y_test, color=f(3))
+    axs[1].plot(t, y_pred, color=f(2))
+    axs[2].plot(t, y_error, color=f(1))
+    ylim = [np.inf, -np.inf]
+
+    for ax in axs:
+        y1, y2 = ax.get_ylim()
+        if y1 < ylim[0]:
+            ylim[0] = y1
+        if y2 > ylim[1]:
+            ylim[1] = y2
+    for ax in axs:
+        ax.set_ylim(ylim)
+        for sp in ('top', 'right', 'bottom'):
+            ax.spines[sp].set_visible(False)
+    axs[-1].spines['bottom'].set_visible(True)
+    for ax in axs[:-1]:
+        ax.set_xticks([])
+    axs[-1].set_xlabel('Time (minutes)')
+    axs[1].set_ylabel('Eye velocity (z-scored)')
+    fig.set_figwidth(figsize[0])
+    fig.set_figheight(figsize[1])
+    fig.tight_layout()
+
+    return fig, axs, mlati, reg, y_test, y_pred
+
+def visualize_example_continuous_prediction(
+    y_test,
+    y_pred,
+    x_range=(160876, 161962),
+    figsize=(8, 3),
+    cmap='Blues'
+    ):
+    """
+    """
+
+    x1, x2 = x_range
+    y_pred_slc = y_pred[x1: x2]
+    y_test_slc = y_test[x1: x2]
+    t = np.arange(y_pred_slc.size) * 0.01
+    f = plt.get_cmap(cmap, 5)
+    fig, axs = plt.subplots(nrows=2)
+    axs[0].plot(t, y_test_slc, color=f(3))
+    axs[1].plot(t, y_pred_slc, color=f(2))
+    axs[1].set_xlabel('Time (s)')
+    fig.supylabel('Eye velocity (z-scored)', fontsize=10)
+    ylim = [np.inf, -np.inf]
+    for ax in axs:
+        y1, y2 = ax.get_ylim()
+        if y1 < ylim[0]:
+            ylim[0] = y1
+        if y2 > ylim[1]:
+            ylim[1] = y2
+    for ax in axs:
+        ax.set_ylim(ylim)
+        for sp in ('top', 'right'):
+            ax.spines[sp].set_visible(False)
+    axs[0].set_xticks([])
+    axs[0].spines['bottom'].set_visible(False)
+    fig.set_figwidth(figsize[0])
+    fig.set_figheight(figsize[1])
+    fig.tight_layout()
+
+    return fig, axs
