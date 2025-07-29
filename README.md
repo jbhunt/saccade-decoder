@@ -100,9 +100,9 @@ mlati = data.Mlati(<path to h5 file>, form='C') # C for continuous
 ```
 My implementation of an LSTM model can be found at `sdpy.rnn.PyTorchRNNRegressor`. As with the previous implementations, I emulated scikit-learn's interface giving the class `fit` and `predict` methods.
 ```Python
-from sdpy import rnn
+from sdpy import rnn, utils
 reg = rnn.PyTorchRNNRegressor()
-X_train, X_test, y_train, y_split = rnn.split_time_series(mlati.X, mlati.y, test_fraction=0.2) # Helper function for splitting up data into training and test datasets
+X_train, X_test, y_train, y_split = utils.split_time_series(mlati.X, mlati.y, test_fraction=0.2) # Helper function for splitting up data into training and test datasets
 reg.fit(X_train, y_train)
 y_predicted = rnn.predict(X_test)
 ``` 
