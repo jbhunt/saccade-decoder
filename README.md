@@ -88,9 +88,9 @@ For this example recording, the decoder does pretty well using neural activity t
   <img src="docs/imgs/r2_over_time.png" width="700" alt="Animated demo">
 </p>
 
-Interestingly, neural activity is highly informative of eye velocity 0 to ~350 ms in the past. This makes sense given that I targeted my recordings to a visual brain structure. TEye movements elicit visual responses in the neurons I recorded from, so these responses are useful for decoding past eye movement. 
+Interestingly, neural activity is highly informative of eye velocity 0 to ~350 ms in the past. This makes sense given that I targeted my recordings to a visual brain structure. Eye movements elicit visual responses in the neurons I recorded from, so these responses are useful for decoding past eye movements. 
 
-I was kind of surprised to see almost no ability to predict future eye velocity; all the curves rectify around 0 s. I assumed I would have picked up some neurons with premotor activity, so I expected that the total neural activity would be useful for predicting near-future eye velocity, but that doesn't seem the case. In the future, I'd like to see if including only neurons with premotor activity (i.e., excluding purely visual neurons) has any effect on the ability of this model to predict near-future eye velocity.
+I was kind of surprised that all the curves rectify around 0 s; the model was unable to decode near-future eye velocity from neural activity. I assumed I picked up at least some neurons with premotor responses, so I expected that the model would have some ability to decode near-future eye velocity, but that doesn't seem the case. In the future, I'd like to see if including only neurons with premotor activity (i.e., excluding purely visual neurons) has any effect on the ability of this model to predict near-future eye velocity.
 
 # 5. Neural decoding with an RNN
 Finally, I implemented a many-to-one long short-term memory (LSTM) model that predicts future eye velocity given a sequence of neural activity from a lagged time window. LSTM models are the de facto standard for real-time neural decoding because they explicitly model temporal structure. To use the LSTM regressor, you need to reshape the data into a continous time series. To do this, you can use the `sdpy.data.Mlati` class and the `form` keyword argument.
