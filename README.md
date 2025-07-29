@@ -110,6 +110,7 @@ The hyperparameters that can be tuned are:
 - `n_steps` - The size of the input sequence (in bins)
 - `n_units` - The number of memory cells in each layer of the LSTM
 - `n_layers` - The number of layers in the LSTM
+
 I used scikit-learn's `GridSearchCV` class to search the parameter space for the optimal values of each hyperparameter.
 ```Python
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
