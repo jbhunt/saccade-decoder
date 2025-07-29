@@ -88,7 +88,7 @@ For this example recording, the decoder does pretty well using neural activity t
   <img src="docs/imgs/r2_over_time.png" width="700" alt="Animated demo">
 </p>
 
-Interestingly, neural activity is highly informative of eye velocity 0 to ~350 ms in the past. This makes sense given that I targeted my recordings to a visual brain structure. Eye movements elicit visual responses in the neurons I recorded from, so these responses are useful for decoding past eye movements. 
+Interestingly, neural activity is highly informative of eye velocity 0 to ~350 ms in the past, although performance is variable from recording to recording. This makes sense given that I targeted my recordings to a visual brain structure. Eye movements elicit visual responses in the neurons I recorded from, so these responses are useful for decoding past eye movements. 
 
 I was kind of surprised that all the curves rectify around 0 s; the model was unable to decode near-future eye velocity from neural activity. I assumed I picked up at least some neurons with premotor responses, so I expected that the model would have some ability to decode near-future eye velocity, but that doesn't seem the case. In the future, I'd like to see if including only neurons with premotor activity (i.e., excluding purely visual neurons) has any effect on the ability of this model to predict near-future eye velocity.
 
